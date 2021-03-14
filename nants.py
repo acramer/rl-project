@@ -1,5 +1,6 @@
 from random import randint
 import numpy as np
+from time import sleep
 
 class ant_env:
     def __init__(self, env_size):
@@ -51,8 +52,8 @@ class simple_env(ant_env):
 
         r,c = self.actors[idx]
         dr, dc = actions[action]
-        nr = max(min(r+dr,0),self.space.shape[0])
-        nc = max(min(c+dc,0),self.space.shape[0])
+        nr = min(max(r+dr,0),self.space.shape[0]-1)
+        nc = min(max(c+dc,0),self.space.shape[0]-1)
         self.actors[idx] = (nr,nc)
         if self.food_space[self.actors[idx]]: 
             self.food_space[self.actors[idx]] -= 1
@@ -74,64 +75,83 @@ class simple_env(ant_env):
         return ''.join(['-----']*len(ret[0]))+'\n|'+'|\n|'.join([''.join(r) for r in ret])+'|\n'+''.join(['-----']*len(ret[0]))
         
 def nAnts(n=10,env_size=20,episode_size=100):
-    colony = colony(n)
+    colony = Colony(n)
     env = simple_env(env_size,num_actors=n)
     
     for _ in range(episode_size):
     # while not env.done:
         for i, ant in enumerate(colony):
             env.step(i,ant(env.getSpace(i)))
+        #sleep(1)
+        print(env)
 
 
-class colony:
+class Colony:
     def __init__(self,n=10):
-        self.ants = [ant() for _ in range(n)]
+        self.ants = [Ant() for _ in range(n)]
 
     def __iter__(self):
-        return self.ants
+        return iter(self.ants)
 
-class ant:
-    def __init__(self,memory_size=15,exploring=False):
+class Ant:
+    def __init__(self,memory_size=15,exploring=False,mean=0,sd=0.5):
+        self.exploring = exploring
+        self.memory_size = memory_size
+
+        # Random Walk Distribution
+        rads = np.array([0,45,90,135,180,-135,-90,-45])*np.pi/180
+        normal_dist = 1/(np.sqrt(2*np.pi)*sd) * np.exp(-0.5*((rads-mean)/sd)**2)
+        self.nd = list(normal_dist/np.sum(normal_dist))
+
         self.memory = []
         self.action_memory = 0
-        self.memory_size = memory_size
-        self.exploring = exploring
         self.foraging = False
-        def normal_dist(x , mean , sd):
-            return 1/(np.sqrt(2*np.pi)*sd) * np.exp(-0.5*((x-mean)/sd)**2)
-        self.nd = normal_dist(np.array([0,45,90,135,180,-135,-90,-45])*np.pi/180,0,0.5)
 
     def __call__(self,X):
         return self.act(X)
 
     def act(self,X):
-        act = 0
+        food, trail = X
+        act = self.walk()
         self.action_memory = act
         return act
 
-    def walk(self,X):
-        food, trail = X
-        alist = [[0,1,2,3,4,5,6,7],
-                 [1,2,3,4,5,6,7,0],
-                 [2,3,4,5,6,7,0,1],
-                 [3,4,5,6,7,0,1,2],
-                 [4,5,6,7,0,1,2,3],
-                 [5,6,7,0,1,2,3,4],
-                 [6,7,0,1,2,3,4,5],
-                 [7,0,1,2,3,4,5,6],
-                ]
-        return np.random_choice(alist[self.action_memory],p=self.nd)    
+    def walk(self):
+        pdist = self.nd[self.action_memory:] + self.nd[:self.action_memory]
+        return np.random.choice(8,p=pdist)
 
 
 
 def main():
-    print(len('{:^5}'.format('3')))
-    s = simple_env(11)
-    print(s)
-    s.actors[0] = (0,0)
-    print(s)
-    print(np.pad(s.food_space,(1,1),constant_values=-1))
-    
+    # mean=0
+    # sd=0.5
+    # rads = np.array([0,45,90,135,180,-135,-90,-45])*np.pi/180
+    # nd =  list(1/(np.sqrt(2*np.pi)*sd) * np.exp(-0.5*((rads-mean)/sd)**2))
+    # print(['{:9.4}'.format(n) for n in nd])
+    # print(['{:9.4}'.format(n) for n in nd[1:]+nd[:1]])
+    # print(['{:9.4}'.format(n) for n in nd[2:]+nd[:2]])
+    # print(['{:9.4}'.format(n) for n in nd[3:]+nd[:3]])
+    # print(['{:9.4}'.format(n) for n in nd[4:]+nd[:4]])
+    # print(['{:9.4}'.format(n) for n in nd[5:]+nd[:5]])
+    # print(['{:9.4}'.format(n) for n in nd[6:]+nd[:6]])
+    # print(['{:9.4}'.format(n) for n in nd[7:]+nd[:7]])
+    # print(['{:9.4}'.format(n) for n in nd[8:]+nd[:8]])
+    # print()
+    # print()
+    # a = Ant()
+    # for i in range(9):
+    #     a.action_memory = i
+    #     #print(['{:9.4}'.format(n) for n in a.walk()])
+    #     print(a.walk())
+    # print()
+    # print()
+    nAnts()
+
+    #s = simple_env(11)
+    #print(s)
+    #s.actors[0] = (0,0)
+    #print(s)
+    #
 
 if __name__ == '__main__':
     main()
