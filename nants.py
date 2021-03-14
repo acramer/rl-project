@@ -28,9 +28,16 @@ class SimpleEnv(ant_env):
         self.food_space = self.space.copy()
         self.trail_space = self.space.copy()
         self.explore_space = self.space.copy()
+
         if nest_loc == 'center':
             self.nest = ((env_size-1)//2,(env_size-1)//2)
+        elif nest_loc == 'corner':
+            choices = ((0,0),(0,env_size-1),(env_size-1,0),(env_size-1,env_size-1))
+            self.nest = choices[np.random.choice(len(choices))]
+        elif nest_loc == 'random':
+            self.nest = (np.random.choice(np.arange(env_size)),np.random.choice(np.arange(env_size)))
         self.init_food()
+
         if actors:
             self.actors = actors
         else:
@@ -40,18 +47,20 @@ class SimpleEnv(ant_env):
         self.done = False
 
     def init_food(self):
-        #nest_mask_size
-        nms = 2
-
-        dist = np.random.normal(0,2,self.space.shape)
-        for i in range(1,10):
-            self.food_space += (dist.astype(np.int32) == i+1).astype(np.float32) * (i+1)
-
-        # Only works for diagonal
-        padding = (self.nest[0]-nms,self.space.shape[0]-(self.nest[0]+nms+1))
-        nest_mask = np.pad(np.zeros((2*nms+1,2*nms+1)),padding,constant_values=(1))
-
-        self.food_space *= nest_mask
+        food_num = 20
+        max_wt = 5
+        foods = np.random.choice(np.arange(1,max_wt),food_num,replace=True)
+        nest_range = 1
+        nest_area =  [(i,j) for j in range(self.nest[1]-nest_range, self.nest[1]+nest_range+1) \
+            if  j >= 0 and j < self.space.shape[1] \
+                for i in range(self.nest[0]-nest_range, self.nest[0]+nest_range+1) \
+                    if  i >= 0 and i < self.space.shape[0]]
+        cand_points =  [(i,j) for i in np.arange(self.space.shape[0]) for j in np.arange(self.space.shape[1]) \
+             if (i,j) not in nest_area]
+        idx = np.random.choice(len(cand_points),food_num,replace=False)
+        cand_points = [cand_points[i] for i in idx]
+        for i in range(1,food_num):
+            self.food_space[cand_points[i]] += foods[i]
 
     def step(self,idx,action):
         self.full_step += 1
@@ -104,8 +113,8 @@ class SimpleEnv(ant_env):
                 ret[ar][ac] = '{:^5}'.format('e' if a.exploring else 'x')
         return ''.join(['-----']*len(ret[0]))+'\n|'+'|\n\n|'.join([''.join(r) for r in ret])+'|\n'+''.join(['-----']*len(ret[0]))
         
-def nAnts(n=10,ne=0,env_size=20,episode_size=100):
-    env = SimpleEnv(env_size)
+def nAnts(n=10,ne=0,env_size=20,episode_size=100,nest_loc='center'):
+    env = SimpleEnv(env_size,nest_loc=nest_loc)
     colony = Colony(env.nest,n,ne)
     env.actors = colony.ants
     
@@ -113,7 +122,7 @@ def nAnts(n=10,ne=0,env_size=20,episode_size=100):
     while not env.done:
         for i, ant in enumerate(colony):
             env.step(i,ant(env.getSpace(i)))
-        #sleep(0.25)
+        sleep(0.1)
         print(env)
         print(colony.food,[(('E' if a.exploring else 'F') if a.foraging else 'R')+str(a.get()) for a in env.actors])
 
@@ -262,7 +271,7 @@ class Ant:
         return [to_nest,(0,to_nest[1]),(to_nest[0],0)]
 
     def walk(self):
-        pdist = self.nd[self.action_memory:] + self.nd[:self.action_memory]
+        pdist = self.nd[-1*self.action_memory:] + self.nd[:-1*self.action_memory]
         return np.random.choice(8,p=pdist)
 
 
@@ -290,7 +299,27 @@ def main():
     #     print(a.walk())
     # print()
     # print()
-    nAnts(20,5)
+        # Random Walk Distribution
+    nAnts(20,5,nest_loc='random')
+
+    #nest = (0,0)
+    #space = np.zeros((10,10))
+    #food_space = space.copy()
+    #food_num = 20
+    #max_wt = 5
+    #foods = np.random.choice(np.arange(1,max_wt),food_num,replace=True)
+    #nest_range = 2
+    #nest_area =  [(i,j) for j in range(nest[1]-nest_range, nest[1]+nest_range+1) \
+    #    if  j >= 0 and j < space.shape[1] \
+    #        for i in range(nest[0]-nest_range, nest[0]+nest_range+1) \
+    #            if  i >= 0 and i < space.shape[0]]
+    #cand_points =  [(i,j) for i in np.arange(space.shape[0]) for j in np.arange(space.shape[1]) \
+    #     if (i,j) not in nest_area]
+    #idx = np.random.choice(len(cand_points),food_num,replace=False)
+    #cand_points = [cand_points[i] for i in idx]
+    #for i in range(1,food_num):
+    #    food_space[cand_points[i]] += foods[i]
+    #print(food_space)
 
     #s = simple_env(11)
     #print(s)
