@@ -42,7 +42,7 @@ class SimpleEnv(ant_env):
         #nest_mask_size
         nms = 2
 
-        dist = np.random.normal(0,5,self.space.shape)
+        dist = np.random.normal(0,2,self.space.shape)
         for i in range(1,10):
             self.food_space += (dist.astype(np.int32) == i+1).astype(np.float32) * (i+1)
 
@@ -91,6 +91,7 @@ class SimpleEnv(ant_env):
     def __str__(self):
         R,C = self.space.shape
         ret = [['{:^5}'.format(str(self.food_space[r,c]) if self.food_space[r,c] else ('('+str(int(self.trail_space[r,c]+1))+')' if self.trail_space[r,c] else '')) for c in range(C)] for r in range(R)]
+        #ret = [['{:^5}'.format('O' if self.food_space[r,c] else ('.' if self.trail_space[r,c] else '')) for c in range(C)] for r in range(R)]
         ret[self.nest[0]][self.nest[1]] = '{:^5}'.format('N')
         for a in map(lambda x:x.get(),self.actors):
             if a != self.nest:
@@ -102,8 +103,8 @@ def nAnts(n=10,env_size=20,episode_size=100):
     colony = Colony(env.nest,n)
     env.actors = colony.ants
     
-    for _ in range(episode_size):
-    # while not env.done:
+    #for _ in range(episode_size):
+    while not env.done:
         for i, ant in enumerate(colony):
             env.step(i,ant(env.getSpace(i)))
         sleep(0.25)
@@ -237,7 +238,7 @@ def main():
     #     print(a.walk())
     # print()
     # print()
-    nAnts(10)
+    nAnts(1)
 
     #s = simple_env(11)
     #print(s)
