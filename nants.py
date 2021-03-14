@@ -13,7 +13,7 @@ class ant_env:
         raise NotImplemented
 
 class simple_env(ant_env):
-    def __init__(self, env_size, nest_loc='center'):
+    def __init__(self, env_size, nest_loc='center', num_actors=1):
         super().__init__(env_size)
         self.food_space = self.space.copy()
         self.trail_space = self.space.copy()
@@ -21,10 +21,61 @@ class simple_env(ant_env):
         if nest_loc == 'center':
             self.nest = ((env_size-1)//2,(env_size-1)//2)
         self.init_food()
+        self.actors = [self.nest]*num_actors
+        self.done = False
 
     def init_food(self):
-        np.random.normal(1,0,self.space)
+        #nest_mask_size
+        nms = 2
+
+        dist = np.random.normal(0,10,self.space.shape)
+        for i in range(1,10):
+            self.food_space += (dist.astype(np.int32) == i+1).astype(np.float32) * (i+1)
+
+        # Only works for diagonal
+        padding = (self.nest[0]-nms,self.space.shape[0]-(self.nest[0]+nms+1))
+        nest_mask = np.pad(np.zeros((2*nms+1,2*nms+1)),padding,constant_values=(1))
+
+        self.food_space *= nest_mask
+
+    def step(self,idx,action):
+        actions = [ (-1, 0), # North
+                    (-1, 1),
+                    ( 0, 1), # West
+                    ( 1, 1),
+                    ( 1, 0), # South
+                    ( 1,-1),
+                    ( 0,-1), # East
+                    (-1,-1), 
+                    ]
+
+        r,c = self.actors[idx]
+        dr, dc = actions[action]
+        nr = max(min(r+dr,0),self.space.shape[0])
+        nc = max(min(c+dc,0),self.space.shape[0])
+        self.actors[idx] = (nr,nc)
+        if self.food_space[self.actors[idx]]: 
+            self.food_space[self.actors[idx]] -= 1
+
+    def getSpace(self,idx):
+        r, c = self.actors[idx]
+        trail = list(np.pad(self.trail_space,(1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
+        r, c = self.actors[idx]
+        food = list(np.pad(self.food_space,(1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
+        return food[:4]+food[5:],trail[:4]+trail[5:]
+
+    def __str__(self):
+        return ""
         
+def nAnts(n=10,env_size=20,episode_size=100):
+    colony = colony(n)
+    env = simple_env(env_size,num_actors=n)
+    
+    for _ in range(episode_size):
+    # while not env.done:
+        for i, ant in enumerate(colony):
+            env.step(i,ant(env.getSpace(i)))
+
 
 class colony:
     def __init__(self,n=10):
@@ -34,32 +85,46 @@ class colony:
         return self.ants
 
 class ant:
-    def __init__(self):
-        pass
-        self.id = randint(0,100)
+    def __init__(self,memory_size=15,exploring=False):
+        self.memory = []
+        self.action_memory = 0
+        self.memory_size = memory_size
+        self.exploring = exploring
+        self.foraging = False
+        def normal_dist(x , mean , sd):
+            return 1/(np.sqrt(2*np.pi)*sd) * np.exp(-0.5*((x-mean)/sd)**2)
+        self.nd = normal_dist(np.array([0,45,90,135,180,-135,-90,-45])*np.pi/180,0,0.5)
 
     def __call__(self,X):
-        raise NotImplemented
         return self.act(X)
 
     def act(self,X):
-        raise NotImplemented
+        act = 0
+        self.action_memory = act
+        return act
+
+    def walk(self,X):
+        food, trail = X
+        alist = [[0,1,2,3,4,5,6,7],
+                 [1,2,3,4,5,6,7,0],
+                 [2,3,4,5,6,7,0,1],
+                 [3,4,5,6,7,0,1,2],
+                 [4,5,6,7,0,1,2,3],
+                 [5,6,7,0,1,2,3,4],
+                 [6,7,0,1,2,3,4,5],
+                 [7,0,1,2,3,4,5,6],
+                ]
+        return np.random_choice(alist[self.action_memory],p=self.nd)    
+
 
 
 def main():
-    nest = (4,4)
-    nest_mask_size = 2
-    val_range = (1,10)
-    dist = np.random.normal(0,10,(10,10))
-    space = np.zeros((10,10))
-    for i in range(1,10):
-        space += (dist.astype(np.int32) == i+1).astype(np.float32) * (i+1)
-    nest_mask = np.ones((10,10))
-    #nest_mask = 
-    #space *= 
-    print(space)
-    #print((np.random.normal(0,2,(10,10)) > 0).astype(np.float32)*np.ones((10,10)))
-
+    # 0
+    # 1
+    print(list(nd)[1:]+list(nd)[:1])
+    s = simple_env(11)
+    print(np.pad(s.food_space,(1,1),constant_values=-1))
+    
 
 if __name__ == '__main__':
     main()
