@@ -65,7 +65,13 @@ class simple_env(ant_env):
         return food[:4]+food[5:],trail[:4]+trail[5:]
 
     def __str__(self):
-        return ""
+        R,C = self.space.shape
+        ret = [['{:^5}'.format(str(self.food_space[r,c]) if self.food_space[r,c] else '.') for c in range(C)] for r in range(R)]
+        ret[self.nest[0]][self.nest[1]] = '{:^5}'.format('N')
+        for a in self.actors:
+            if a != self.nest:
+                ret[a[0]][a[1]] = '{:^5}'.format('x')
+        return ''.join(['-----']*len(ret[0]))+'\n|'+'|\n|'.join([''.join(r) for r in ret])+'|\n'+''.join(['-----']*len(ret[0]))
         
 def nAnts(n=10,env_size=20,episode_size=100):
     colony = colony(n)
@@ -119,10 +125,11 @@ class ant:
 
 
 def main():
-    # 0
-    # 1
-    print(list(nd)[1:]+list(nd)[:1])
+    print(len('{:^5}'.format('3')))
     s = simple_env(11)
+    print(s)
+    s.actors[0] = (0,0)
+    print(s)
     print(np.pad(s.food_space,(1,1),constant_values=-1))
     
 
