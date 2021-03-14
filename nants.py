@@ -13,8 +13,16 @@ class ant_env:
     def act(self,X):
         raise NotImplemented
 
-class simple_env(ant_env):
-    def __init__(self, env_size, nest_loc='center', num_actors=1):
+class SimpleEnv(ant_env):
+    class SimpleActor:
+        def __init__(self,loc):
+            self.loc = loc
+        def set(self,r,c):
+            self.loc = (r,c)
+        def get(self):
+            return self.loc
+
+    def __init__(self, env_size, nest_loc='center', num_actors=0,actors=None):
         super().__init__(env_size)
         self.food_space = self.space.copy()
         self.trail_space = self.space.copy()
@@ -22,7 +30,10 @@ class simple_env(ant_env):
         if nest_loc == 'center':
             self.nest = ((env_size-1)//2,(env_size-1)//2)
         self.init_food()
-        self.actors = [self.nest]*num_actors
+        if actors:
+            self.actors = actors
+        else:
+            self.actors = [SimpleEnv.SimpleActor(self.nest)]*num_actors
         self.done = False
 
     def init_food(self):
@@ -50,51 +61,54 @@ class simple_env(ant_env):
                     (-1,-1), 
                     ]
 
-        r,c = self.actors[idx]
+        r,c = self.actors[idx].get()
         dr, dc = actions[action]
         nr = min(max(r+dr,0),self.space.shape[0]-1)
         nc = min(max(c+dc,0),self.space.shape[0]-1)
-        self.actors[idx] = (nr,nc)
-        if self.food_space[self.actors[idx]]: 
-            self.food_space[self.actors[idx]] -= 1
+        self.actors[idx].set(nr,nc)
+        if self.food_space[self.actors[idx].get()]: 
+            self.food_space[self.actors[idx].get()] -= 1
 
     def getSpace(self,idx):
-        r, c = self.actors[idx]
-        trail = list(np.pad(self.trail_space,(1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
-        r, c = self.actors[idx]
+        r, c = self.actors[idx].get()
         food = list(np.pad(self.food_space,(1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
+        trail = list(np.pad(self.trail_space,(1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
         return food[:4]+food[5:],trail[:4]+trail[5:]
 
     def __str__(self):
         R,C = self.space.shape
         ret = [['{:^5}'.format(str(self.food_space[r,c]) if self.food_space[r,c] else '.') for c in range(C)] for r in range(R)]
         ret[self.nest[0]][self.nest[1]] = '{:^5}'.format('N')
-        for a in self.actors:
+        for a in map(lambda x:x.get(),self.actors):
             if a != self.nest:
                 ret[a[0]][a[1]] = '{:^5}'.format('x')
         return ''.join(['-----']*len(ret[0]))+'\n|'+'|\n|'.join([''.join(r) for r in ret])+'|\n'+''.join(['-----']*len(ret[0]))
         
 def nAnts(n=10,env_size=20,episode_size=100):
-    colony = Colony(n)
-    env = simple_env(env_size,num_actors=n)
+    env = SimpleEnv(env_size)
+    colony = Colony(env.nest,n)
+    env.actors = colony.ants
     
     for _ in range(episode_size):
     # while not env.done:
         for i, ant in enumerate(colony):
             env.step(i,ant(env.getSpace(i)))
-        #sleep(1)
+        sleep(0.25)
         print(env)
+        print([('F' if a.foraging else 'R')+str(a.get()) for a in env.actors])
 
 
 class Colony:
-    def __init__(self,n=10):
-        self.ants = [Ant() for _ in range(n)]
+    def __init__(self,nest,n=10):
+        self.ants = [Ant(nest) for _ in range(n)]
 
     def __iter__(self):
         return iter(self.ants)
 
 class Ant:
-    def __init__(self,memory_size=15,exploring=False,mean=0,sd=0.5):
+    def __init__(self,nest,memory_size=15,exploring=False,mean=0,sd=0.5):
+        self.nest = nest
+        self.location = nest
         self.exploring = exploring
         self.memory_size = memory_size
 
@@ -110,9 +124,65 @@ class Ant:
     def __call__(self,X):
         return self.act(X)
 
+    def set(self,r,c):
+        self.location = (r,c)
+
+    def get(self):
+        return self.location
+
     def act(self,X):
+        if len(self.memory) == self.memory_size+1:
+            self.memory.pop(0)
+        self.memory.append(self.location)
+
+        actions = { (-1, 0):0, # North
+                    (-1, 1):1,
+                    ( 0, 1):2, # West
+                    ( 1, 1):3,
+                    ( 1, 0):4, # South
+                    ( 1,-1):5,
+                    ( 0,-1):6, # East
+                    (-1,-1):7, 
+                    }
+
         food, trail = X
-        act = self.walk()
+
+        if self.foraging:
+
+            # Removing trail from spaces recently visited
+            for a,v in actions.items():
+                if (self.location[1]+a[0],self.location[1]+a[1]) in self.memory:
+                    trail[v]=0
+
+            if sum(food): 
+                act = np.argmax(food)
+                self.foraging = False
+            elif sum(trail):
+                act = np.argmax(trail)
+            else:
+                act = self.walk()
+        else:
+            if self.location == self.nest:
+                self.foraging = True
+                #self.action_memory = ?
+                act = self.walk()
+            else:
+                dr,dc = 0,0
+                if   self.location[0] < self.nest[0]:
+                    dr = 1
+                elif self.location[0] > self.nest[0]:
+                    dr = -1
+                if   self.location[1] < self.nest[1]:
+                    dc = 1
+                elif self.location[1] > self.nest[1]:
+                    dc = -1
+                for a,v in actions.items():
+                    if a not in [(dr,dc),(0,dc),(dr,0)]:
+                        trail[v] = 0
+                trail[list(actions.keys()).index((dr,dc))] += 0.5
+                act = np.argmax(trail)
+                
+                
         self.action_memory = act
         return act
 
@@ -149,7 +219,7 @@ def main():
 
     #s = simple_env(11)
     #print(s)
-    #s.actors[0] = (0,0)
+    #s.actors[0].set(0,0)
     #print(s)
     #
 
