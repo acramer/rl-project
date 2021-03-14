@@ -17,6 +17,7 @@ class SimpleEnv(ant_env):
     class SimpleActor:
         def __init__(self,loc):
             self.loc = loc
+            self.foraging = False
         def set(self,r,c):
             self.loc = (r,c)
         def get(self):
@@ -58,6 +59,8 @@ class SimpleEnv(ant_env):
             self.trail_space -= (self.trail_space > 0).astype(np.float32)/12
             self.trail_space *= (self.trail_space > 1/12).astype(np.float32)
             self.full_step = 0
+            if not np.sum(self.food_space) and all([a.foraging for a in self.actors]):
+                self.done = True
 
         actions = [ (-1, 0), # North
                     (-1, 1),
@@ -70,6 +73,7 @@ class SimpleEnv(ant_env):
                     ]
 
         set_trail = bool(action//8)
+        pickup_food = bool(action//16)
         action %= 8
 
         r,c = self.actors[idx].get()
@@ -77,7 +81,7 @@ class SimpleEnv(ant_env):
         nr = min(max(r+dr,0),self.space.shape[0]-1)
         nc = min(max(c+dc,0),self.space.shape[0]-1)
         self.actors[idx].set(nr,nc)
-        if self.food_space[self.actors[idx].get()]: 
+        if pickup_food and self.food_space[self.actors[idx].get()]:
             self.food_space[self.actors[idx].get()] -= 1
         if set_trail and self.trail_space[self.actors[idx].get()] < 2:
             self.trail_space[self.actors[idx].get()] += 1
@@ -94,28 +98,29 @@ class SimpleEnv(ant_env):
         #ret = [['{:^5}'.format(str(self.food_space[r,c]) if self.food_space[r,c] else ('('+str(int(self.trail_space[r,c]+1))+')' if self.trail_space[r,c] else '')) for c in range(C)] for r in range(R)]
         ret = [['{:^5}'.format('O' if self.food_space[r,c] else ('.' if self.trail_space[r,c] else '')) for c in range(C)] for r in range(R)]
         ret[self.nest[0]][self.nest[1]] = '{:^5}'.format('N')
-        for a in map(lambda x:x.get(),self.actors):
-            if a != self.nest:
-                ret[a[0]][a[1]] = '{:^5}'.format('x')
-        return ''.join(['-----']*len(ret[0]))+'\n|'+'|\n|'.join([''.join(r) for r in ret])+'|\n'+''.join(['-----']*len(ret[0]))
+        for a in self.actors:
+            ar,ac = a.get()
+            if (ar,ac) != self.nest:
+                ret[ar][ac] = '{:^5}'.format('e' if a.exploring else 'x')
+        return ''.join(['-----']*len(ret[0]))+'\n|'+'|\n\n|'.join([''.join(r) for r in ret])+'|\n'+''.join(['-----']*len(ret[0]))
         
-def nAnts(n=10,env_size=20,episode_size=100):
+def nAnts(n=10,ne=0,env_size=20,episode_size=100):
     env = SimpleEnv(env_size)
-    colony = Colony(env.nest,n)
+    colony = Colony(env.nest,n,ne)
     env.actors = colony.ants
     
     #for _ in range(episode_size):
     while not env.done:
         for i, ant in enumerate(colony):
             env.step(i,ant(env.getSpace(i)))
-        sleep(0.25)
+        #sleep(0.25)
         print(env)
-        print(colony.food,[('F' if a.foraging else 'R')+str(a.get()) for a in env.actors])
+        print(colony.food,[(('E' if a.exploring else 'F') if a.foraging else 'R')+str(a.get()) for a in env.actors])
 
 
 class Colony:
-    def __init__(self,nest,n=10):
-        self.ants = [Ant(nest,self) for _ in range(n)]
+    def __init__(self,nest,n=10,nexp=1):
+        self.ants = [Ant(nest,self) for _ in range(n-nexp)]+[Ant(nest,self,exploring=True) for _ in range(nexp)]
         self.food = 0
 
     def __call__(self):
@@ -141,6 +146,18 @@ class Ant:
         self.action_memory = 0
         self.foraging = False
 
+        self.actions = { (-1, 0):0, # North
+                         (-1, 1):1,
+                         ( 0, 1):2, # West
+                         ( 1, 1):3,
+                         ( 1, 0):4, # South
+                         ( 1,-1):5,
+                         ( 0,-1):6, # East
+                         (-1,-1):7, 
+                        }
+
+
+
     def __call__(self,X):
         return self.act(X)
 
@@ -155,24 +172,6 @@ class Ant:
             self.memory.pop(0)
         self.memory.append(self.location)
 
-        actions = { (-1, 0):0, # North
-                    (-1, 1):1,
-                    ( 0, 1):2, # West
-                    ( 1, 1):3,
-                    ( 1, 0):4, # South
-                    ( 1,-1):5,
-                    ( 0,-1):6, # East
-                    (-1,-1):7, 
-                    }
-
-        # actions in tuple form that take you in the direction of the nest
-        to_nest = (0,0)
-        if   self.location[0] < self.nest[0]: to_nest = ( 1, to_nest[1])
-        elif self.location[0] > self.nest[0]: to_nest = (-1, to_nest[1])
-        if   self.location[1] < self.nest[1]: to_nest = (to_nest[0],  1)
-        elif self.location[1] > self.nest[1]: to_nest = (to_nest[0], -1)
-        to_nest = [to_nest,(0,to_nest[1]),(to_nest[0],0)]
-
         food, trail = X
         if self.location == self.nest:
             self.store_food()
@@ -180,35 +179,87 @@ class Ant:
             self.action_memory = randint(0,7)
 
         if self.foraging:
-
-            # Removing trail from spaces recently visited
-            for a,v in actions.items():
-                if (self.location[0]+a[0],self.location[1]+a[1]) in self.memory:
-                    trail[v] = min(1/13,trail[v])
-                if a in to_nest:
-                    trail[v] = 0
-
-            if max(food) > 0: 
-                act = np.argmax(food)
-                self.foraging = False
-            elif max(trail) > 0: 
-                act = np.argmax(trail)
+            if self.exploring:
+                act = self.explore(food,trail)
             else:
-                act = self.walk()
-                if food[act] < 0:
-                    act += 4
-                    act %= 8
+                act = self.forage(food,trail)
+            # Removing trail from spaces recently visited
         else:
-            for a,v in actions.items():
+            to_nest = self.to_nest()
+            for a,v in self.actions.items():
                 if a not in to_nest:
                     trail[v] = 0
             # adding preference for trails closer to home
-            trail[list(actions.keys()).index(to_nest[0])] += 0.5
+            trail[list(self.actions.keys()).index(to_nest[0])] += 0.5
             act = np.argmax(trail) + 8
                 
                 
         self.action_memory = act % 8
         return act
+
+    def explore(self,food,trail):
+        if max(food) > 0:
+            efood = []
+            for f,t in zip(food,trail):
+                if f < 0:
+                    efood.append(0)
+                elif f > 0 and t > 0:
+                    efood.append(0.1)
+                elif f > 0:
+                    efood.append(f)
+                else:
+                    efood.append(0.5)
+            efood = list(np.array(efood)/sum(efood))
+            act = np.random.choice(8,p=efood)
+            if food[act]:
+                act += 16
+                self.foraging = False
+        elif max(trail) > 0: 
+            for i,t in enumerate(trail):
+                if t < 0:
+                    trail[i] = 10
+            for a,v in self.actions.items():
+                if (self.location[0]+a[0],self.location[1]+a[1]) in self.memory:
+                    trail[v] = 9
+                if a in self.to_nest():
+                    trail[v] = 9
+            act = np.argmin(trail)
+        else:
+            act = self.walk()
+            if food[act] < 0:
+                act += 4
+                act %= 8
+
+        return act
+
+    def forage(self,food,trail):
+        for a,v in self.actions.items():
+            if (self.location[0]+a[0],self.location[1]+a[1]) in self.memory:
+                trail[v] = min(1/13,trail[v])
+            if a in self.to_nest():
+                trail[v] = 0
+
+        if max(food) > 0: 
+            act = np.argmax(food) + 16
+            self.foraging = False
+        elif max(trail) > 0: 
+            act = np.argmax(trail)
+        else:
+            act = self.walk()
+            if food[act] < 0:
+                act += 4
+                act %= 8
+
+        return act
+
+    def to_nest(self):
+        # actions in tuple form that take you in the direction of the nest
+        to_nest = (0,0)
+        if   self.location[0] < self.nest[0]: to_nest = ( 1, to_nest[1])
+        elif self.location[0] > self.nest[0]: to_nest = (-1, to_nest[1])
+        if   self.location[1] < self.nest[1]: to_nest = (to_nest[0],  1)
+        elif self.location[1] > self.nest[1]: to_nest = (to_nest[0], -1)
+        return [to_nest,(0,to_nest[1]),(to_nest[0],0)]
 
     def walk(self):
         pdist = self.nd[self.action_memory:] + self.nd[:self.action_memory]
@@ -239,7 +290,7 @@ def main():
     #     print(a.walk())
     # print()
     # print()
-    nAnts(10)
+    nAnts(20,5)
 
     #s = simple_env(11)
     #print(s)
