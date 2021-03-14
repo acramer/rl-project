@@ -55,8 +55,8 @@ class SimpleEnv(ant_env):
     def step(self,idx,action):
         self.full_step += 1
         if self.full_step >= len(self.actors):
-            self.trail_space -= (self.trail_space > 0).astype(np.float32)/5
-            self.trail_space *= (self.trail_space > 1/5).astype(np.float32)
+            self.trail_space -= (self.trail_space > 0).astype(np.float32)/12
+            self.trail_space *= (self.trail_space > 1/12).astype(np.float32)
             self.full_step = 0
 
         actions = [ (-1, 0), # North
@@ -79,7 +79,8 @@ class SimpleEnv(ant_env):
         self.actors[idx].set(nr,nc)
         if self.food_space[self.actors[idx].get()]: 
             self.food_space[self.actors[idx].get()] -= 1
-        self.trail_space[self.actors[idx].get()] += 1
+        if set_trail and self.trail_space[self.actors[idx].get()] < 2:
+            self.trail_space[self.actors[idx].get()] += 1
 
     def getSpace(self,idx):
         convert_input = lambda x : x[1:3]+x[5:6]+x[8:5:-1]+x[3:4]+x[0:1]
@@ -90,8 +91,8 @@ class SimpleEnv(ant_env):
 
     def __str__(self):
         R,C = self.space.shape
-        ret = [['{:^5}'.format(str(self.food_space[r,c]) if self.food_space[r,c] else ('('+str(int(self.trail_space[r,c]+1))+')' if self.trail_space[r,c] else '')) for c in range(C)] for r in range(R)]
-        #ret = [['{:^5}'.format('O' if self.food_space[r,c] else ('.' if self.trail_space[r,c] else '')) for c in range(C)] for r in range(R)]
+        #ret = [['{:^5}'.format(str(self.food_space[r,c]) if self.food_space[r,c] else ('('+str(int(self.trail_space[r,c]+1))+')' if self.trail_space[r,c] else '')) for c in range(C)] for r in range(R)]
+        ret = [['{:^5}'.format('O' if self.food_space[r,c] else ('.' if self.trail_space[r,c] else '')) for c in range(C)] for r in range(R)]
         ret[self.nest[0]][self.nest[1]] = '{:^5}'.format('N')
         for a in map(lambda x:x.get(),self.actors):
             if a != self.nest:
@@ -109,8 +110,7 @@ def nAnts(n=10,env_size=20,episode_size=100):
             env.step(i,ant(env.getSpace(i)))
         sleep(0.25)
         print(env)
-        print([('F' if a.foraging else 'R')+str(a.get()) for a in env.actors])
-        print(colony.food)
+        print(colony.food,[('F' if a.foraging else 'R')+str(a.get()) for a in env.actors])
 
 
 class Colony:
@@ -174,39 +174,40 @@ class Ant:
         to_nest = [to_nest,(0,to_nest[1]),(to_nest[0],0)]
 
         food, trail = X
+        if self.location == self.nest:
+            self.store_food()
+            self.foraging = True
+            self.action_memory = randint(0,7)
 
         if self.foraging:
 
             # Removing trail from spaces recently visited
             for a,v in actions.items():
                 if (self.location[0]+a[0],self.location[1]+a[1]) in self.memory:
-                    trail[v]=0
+                    trail[v] = min(1/13,trail[v])
                 if a in to_nest:
-                    trail[v]=0
+                    trail[v] = 0
 
-            if sum(food): 
+            if max(food) > 0: 
                 act = np.argmax(food)
                 self.foraging = False
-            elif sum(trail):
+            elif max(trail) > 0: 
                 act = np.argmax(trail)
             else:
                 act = self.walk()
+                if food[act] < 0:
+                    act += 4
+                    act %= 8
         else:
-            if self.location == self.nest:
-                self.store_food()
-                self.foraging = True
-                #self.action_memory = ?
-                act = self.walk()
-            else:
-                for a,v in actions.items():
-                    if a not in to_nest:
-                        trail[v] = 0
-                # adding preference for trails closer to home
-                trail[list(actions.keys()).index(to_nest[0])] += 0.5
-                act = np.argmax(trail) + 8
+            for a,v in actions.items():
+                if a not in to_nest:
+                    trail[v] = 0
+            # adding preference for trails closer to home
+            trail[list(actions.keys()).index(to_nest[0])] += 0.5
+            act = np.argmax(trail) + 8
                 
                 
-        self.action_memory = act // 8
+        self.action_memory = act % 8
         return act
 
     def walk(self):
@@ -238,7 +239,7 @@ def main():
     #     print(a.walk())
     # print()
     # print()
-    nAnts(1)
+    nAnts(10)
 
     #s = simple_env(11)
     #print(s)
