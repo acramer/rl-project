@@ -47,8 +47,8 @@ class SimpleEnv(ant_env):
         self.done = False
 
     def init_food(self):
-        food_num = 20
-        max_wt = 5
+        food_num = 10
+        max_wt = 10
         foods = np.random.choice(np.arange(1,max_wt),food_num,replace=True)
         nest_range = 1
         nest_area =  [(i,j) for j in range(self.nest[1]-nest_range, self.nest[1]+nest_range+1) \
@@ -65,8 +65,9 @@ class SimpleEnv(ant_env):
     def step(self,idx,action):
         self.full_step += 1
         if self.full_step >= len(self.actors):
-            self.trail_space -= (self.trail_space > 0).astype(np.float32)/12
-            self.trail_space *= (self.trail_space > 1/12).astype(np.float32)
+            trail_len = 15
+            self.trail_space -= (self.trail_space > 0).astype(np.float32)/trail_len
+            self.trail_space *= (self.trail_space > 1/trail_len).astype(np.float32)
             self.full_step = 0
             if not np.sum(self.food_space) and all([a.foraging for a in self.actors]):
                 self.done = True
@@ -124,7 +125,8 @@ def nAnts(n=10,ne=0,env_size=20,episode_size=100,nest_loc='center'):
             env.step(i,ant(env.getSpace(i)))
         sleep(0.1)
         print(env)
-        print(colony.food,[(('E' if a.exploring else 'F') if a.foraging else 'R')+str(a.get()) for a in env.actors])
+        #print('Food Count:',colony.food,[(('E' if a.exploring else 'F') if a.foraging else 'R')+str(a.get()) for a in env.actors])
+        print('Food Count:',colony.food)
 
 
 class Colony:
@@ -300,7 +302,7 @@ def main():
     # print()
     # print()
         # Random Walk Distribution
-    nAnts(20,5,nest_loc='random')
+    nAnts(30,10,env_size=25,nest_loc='random')
 
     #nest = (0,0)
     #space = np.zeros((10,10))
