@@ -77,8 +77,9 @@ class SimpleEnv(ant_env):
     def step(self,idx,action):
         self.full_step += 1
         if self.full_step >= len(self.actors):
-            # self.trail_space -= (self.trail_space > 0).astype(np.float32)/12
-            # self.trail_space *= (self.trail_space > 1/12).astype(np.float32)
+            # trail_len = 15
+            # self.trail_space -= (self.trail_space > 0).astype(np.float32)/trail_len
+            # self.trail_space *= (self.trail_space > 1/trail_len).astype(np.float32)
             self.trail_space -= 0.05         # Pheromone evaporation rate: 0.05 per time step
             self.trail_space[self.trail_space<0] = 0
             self.full_step = 0
@@ -167,9 +168,10 @@ def nAnts(n=5,ne=0,env_size=20,episode_size=100,nest_loc='center'):
     while not env.done:
         for i, ant in enumerate(colony):
             env.step(i,ant(env.getSpace(i)))
-        # sleep(0.05)
+        sleep(0.1)
         # print(env)
-        # print(colony.food,[(('E' if a.exploring else 'F') if a.foraging else 'R')+str(a.get()) for a in env.actors])
+        # print('Food Count:',colony.food,[(('E' if a.exploring else 'F') if a.foraging else 'R')+str(a.get()) for a in env.actors])
+        # print('Food Count:',colony.food)
         env.plot()              # Plot the simulation animation in matplotlib
 
 
