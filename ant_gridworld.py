@@ -3,6 +3,8 @@ import numpy as np
 from time import sleep
 import matplotlib.pyplot as plt
 
+# plt.ion()
+
 class Env:
     class State:
         def __init__(self, env_size):
@@ -23,12 +25,15 @@ class Env:
                     self.grid_space[loc] = 1
                     self.total_obs_pts.add(loc)
 
-    def __init__(self,env_size=20, food_num=20, max_wt=5, nest_loc="center", nest_range=1, obstacle_no=10):
-        self.reset(env_size, food_num, max_wt, nest_loc, nest_range, obstacle_no)
+    def __init__(self,env_size=20, food_num=15, max_wt=5, nest_loc="center", nest_range=1, obstacle_no=10):
+        self.reset(env_size, food_num, max_wt, nest_loc, nest_range, obstacle_no)  
 
     def reset(self,env_size=20, food_num=20, max_wt=5, nest_loc="center", nest_range=1, obstacle_no=10):
         self.state = Env.State(env_size)
-
+        self.done = False
+        self.ants = []
+        self.expl_ants = []
+        self.totalFoodCollected = 0
         if nest_loc == 'center':
             self.nest = ((env_size-1)//2,(env_size-1)//2)
         elif nest_loc == 'corner':
@@ -37,6 +42,10 @@ class Env:
         elif nest_loc == 'random':
             self.nest = (np.random.choice(np.arange(env_size)),np.random.choice(np.arange(env_size)))
         self.init_food_obstacles(food_num, max_wt, nest_range,obstacle_no)
+        self.createColony(self.nest)
+
+    def storeFood(self):
+        self.totalFoodCollected += 1
 
     def init_food_obstacles(self, food_num, max_wt, nest_range, obstacle_no):
         foods = np.random.choice(np.arange(1,max_wt+1),food_num,replace=True)
@@ -62,15 +71,49 @@ class Env:
         cand_points = [i for i in cand_points if i not in self.state.total_obs_pts]
         idx = np.random.choice(len(cand_points),food_num,replace=False)
         food_locs = [cand_points[i] for i in idx]
+        self.food_locs = food_locs
         self.state.add_food(food_locs, foods)
 
+    def createColony(self, nest, num_ants = 10):
+        for idx in range(num_ants):
+            if np.random.rand() > 0.15:
+                self.addAntToColony(idx, nest, is_exploring=False)
+            else:
+                self.addAntToColony(idx, nest, is_exploring=True)
+
+    def addAntToColony(self,idx, nest, is_exploring = "No_Arg" ):
+        if is_exploring=="No_Arg":
+            if len(self.expl_ants)/self.ants <= 0.15:
+                is_exploring = True
+            else:
+                is_exploring = False
+
+        ant = AntAgent(idx, self, nest, is_exploring)
+        if is_exploring:
+            self.expl_ants.append(ant)
+        self.ants.append(ant)
+
+    def get_state(self, antID):
+        r, c  = self.ants[antID].get()
+        convert_input = lambda x : x[1:3]+x[5:6]+x[8:5:-1]+x[3:4]+x[0:1]
+        food = list(np.pad(self.state.food_space,(1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
+        trail = list(np.pad(self.state.trail_space,(1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
+        return convert_input(food), convert_input(trail)
+
     def step(self, action):
+        """ TODO depending on action, 
+        1. Change food_space. trail_space
+        2. Update the location of the ant
+        3. Call get_reward for the action taken
+
+        X. Check if all food is exhausted -> set self.done=True
+        """
         pass
 
     def get_reward(self, state, action):
-        pass
-
-    def take_action(self):
+        """ TODO
+        as discussed, assign various rewards for various state,action pairs.
+        """
         pass
 
     def plot_environment(self):
@@ -104,10 +147,62 @@ class Env:
         plt.show()
         plt.pause(0.01)
 
+class AntAgent:
+    def __init__(self,ID,env,nest,exploring=False, mean=0, sd=1):
+        self.antID = ID
+        self.nest = nest
+        self.location = nest
+        self.exploring = exploring
+        self.env = env
+        self.action_memory = 0
+        self.foraging = False
+        rads = np.array([0,45,90,135,180,-135,-90,-45])*np.pi/180
+        self.normal_dist = 1/(np.sqrt(2*np.pi)*sd) * np.exp(-0.5*((rads-mean)/sd)**2)
 
+        self.actions = [ (-1, 0), # North
+                         (-1, 1),
+                         ( 0, 1), # East
+                         ( 1, 1),
+                         ( 1, 0), # South
+                         ( 1,-1),
+                         ( 0,-1), # West
+                         (-1,-1), ]
+
+    def get(self):
+        return self.location
+
+    def get_action_probabilities(self):
+        food, trail = self.env.get_state(self.antID)
+        # TODO do neural network step here and get output
+        """
+        input -> food vector, trail vector
+        output -> action vector 
+        use normal distribution over output and find argmax
+        depending on action vector, change location of the agent.
+        """
+        action_idx = 5
+        action = self.actions[action_idx]
+        return action
+
+    def set(self, action):
+        self.location = [self.location[0] + action[0],self.location[1] + action[1]]
+
+
+def run():
+    environment = Env()
+    n = 1
+    while not environment.done:
+        for ant in environment.ants:
+            ant.step()
+            environment.plot_environment()
+
+        n+=1
+        if n>5:
+            break
 
 
 if __name__=="__main__":
-    environment = Env()
+    run()
+
     # print(environment.state.grid_space)
-    environment.plot_environment()
+    # environment.plot_environment()
