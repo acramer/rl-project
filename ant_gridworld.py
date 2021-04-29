@@ -134,7 +134,6 @@ class Env:
         convert_input = lambda x : x[1:3]+x[5:6]+x[8:5:-1]+x[3:4]+x[0:1]
         food  = list(np.pad(self.state.food_space, (1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
         trail = list(np.pad(self.state.trail_space,(1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
-        # return convert_input(food), convert_input(trail)
         return convert_input(food) + convert_input(trail)
 
     # def get_reward(self, state, action):
@@ -177,6 +176,7 @@ class Env:
         current_ant.location = (nr,nc)
         if pickup_food and self.state.food_space[nr,nc]:
             self.state.food_space[nr,nc] -= 1
+            self.state.food_space[self.state.food_space<0] = 0
         # if set_trail and self.trail_space[self.actors[idx].get()] < 2:    # No upper limit on trail strength
         if set_trail and (nr,nc) != self.nest:      # No trail at nest
             self.state.trail_space[nr,nc] += 1            # Pheromone reinforcement
@@ -204,10 +204,10 @@ class Env:
 
         # Plot the nest, ants, trails
         plt.clf()
-        # if stepNum >= 0:
-        #     plt.annotate('Step: '+str(stepNum),(5,-1))
-        # plt.annotate('Food Stored: '+str(self.totalFoodCollected),(7,-1))
-        # plt.annotate('Food Left: '+str(self.state.remaining_food()),(10,-1))
+        if stepNum >= 0:
+            plt.annotate('Step: '+str(stepNum),(5,-1))
+        plt.annotate('Food Stored: '+str(self.totalFoodCollected),(7,-1))
+        plt.annotate('Food Left: '+str(self.state.remaining_food()),(10,-1))
         plt.axis([-1,C,R,-1])
         plt.scatter(self.nest[1],self.nest[0], color='#D95319', marker='s', s=70)   # Nest
         plt.scatter(tX,tY, color='#0072BD', s=4)                                    # Trail
@@ -223,58 +223,8 @@ class Env:
         close_button.on_clicked(lambda x : exit())
         plt.pause(0.01)
 
-
-    def plot_environment_test(self,stepNum=-1):
-        C,R = self.state.grid_space.shape
-        oY, oX = np.where(self.state.grid_space>0)
-        f1Y, f1X = np.where(self.state.food_space==1)
-        f2Y, f2X = np.where(self.state.food_space==2)
-        f3Y, f3X = np.where(self.state.food_space==3)
-        f4Y, f4X = np.where(self.state.food_space==4)
-        f5Y, f5X = np.where(self.state.food_space==5)
-        tY, tX = np.where(self.state.trail_space>0)
-        # Foraging and non foraging ants 
-        antFY, antFX = [],[]
-        antNFY, antNFX = [],[]
-        for a in self.ants:
-            ar,ac = a.get()
-            if a.foraging: 
-                antFY.append(ar)
-                antFX.append(ac)
-            else:
-                antNFY.append(ar)
-                antNFX.append(ac)
-
-        # Plot the nest, ants, trails
-        plt.clf()
-        if stepNum >= 0:
-            plt.annotate('Step: '+str(stepNum),(5,-1))
-        plt.annotate('Food Stored: '+str(self.totalFoodCollected),(7,-1))
-        plt.annotate('Food Left: '+str(self.state.remaining_food()),(10,-1))
-        plt.axis([-1,C,R,-1])
-        plt.scatter(self.nest[1],self.nest[0], color='#D95319', marker='s', s=70)   # Nest
-        plt.scatter(tX,tY, color='#0072BD', s=4)                                    # Trail
-        plt.scatter(f1X, f1Y, color='#7E2F4E', s=15)
-        plt.scatter(f2X, f2Y, color='#7E2F5E', s=15)
-        plt.scatter(f3X, f3Y, color='#7E2F6E', s=15)
-        plt.scatter(f4X, f4Y, color='#7E2F7E', s=15)
-        plt.scatter(f5X, f5Y, color='#7E2F8E', s=15)
-        plt.scatter(oX, oY, color='#000', s=15)                          # Food particles
-        # plt.scatter(*tuple(zip(*[a.get() for a in self.ants])), color='#77AC30', s=30)
-        plt.scatter(antFX, antFY, color='#77AC30', s=30)                            # Ants searching for food
-        plt.scatter(antNFX, antNFY, color='#A2142F', s=30)                          # Ants returning with food
-        plt.xticks(range(-1,C,C//10))
-        plt.yticks(range(-1,R,R//10))
-        plt.show()
-        close_button = widgets.Button(plt.axes([0.13, 0.89, 0.2, 0.06]), "Close", hovercolor = '0.975')
-        close_button.on_clicked(lambda x : exit())
-        plt.pause(0.01)
-
 # class OriginalAntAgent:
 class AntAgent:
-    # def __init__(self,ID,env,
-    #                   nest,                          exploring=False,mean=0,sd=1):
-    # def __init__(self,nest,store_food,memory_size=20,exploring=False,mean=0,sd=0.5):
     def __init__(self,ID,env,nest,memory_size=20,exploring=False,mean=0,sd=0.5):
         self.antID = ID
         self.env = env
@@ -349,7 +299,6 @@ class AntAgent:
 
     def forage(self,food,trail):
         if max(food) > 0: 
-            print(food)
             act = np.argmax(food) + 16
             self.foraging = False
         elif max(trail) > 0:
@@ -440,11 +389,10 @@ class NewAntAgent:
         # self.action_memory = act % 8
         # return act
         return [1/len(self.actions)]*len(self.actions)
-        # return [1]+[0]*(len(self.actions)-1)
 
     def get_action_probabilities(self):
         food, trail = self.env.get_state(self.antID)
-        # TODO do neural network step here and get output
+        # TODO: do neural network step here and get output
         """
         input -> food vector, trail vector
         output -> action vector 
@@ -460,25 +408,20 @@ class NewAntAgent:
 
 
 def run(configs):
-    environment = Env(num_ants=10)
-    state = environment.reset()
+    num_ants = 10
+    environment = Env(num_ants=num_ants)
+    done = False
     for i in range(configs.max_steps):
         for ant in environment.ants:
-            choice_dist = ant.policy(state)
-            # print(ant.location,end=' ')
+            choice_dist = ant.policy(environment.get_state())
             action = np.random.choice(list(range(len(choice_dist))),p=choice_dist)
-            # actions.append(action)
-            new_state, reward, done = environment.step(action)
-            # print(action,end=' ')
-            # print(ant.location)
-            state=new_state
-        environment.plot_environment_test(i)
+            state, reward, done = environment.step(action)
+        if done: break
         environment.plot_environment(i)
 
 
 if __name__=="__main__":
-    configs = parse_configs()
-    run(configs)
+    run(parse_configs())
 
     # print(environment.state.grid_space)
     # environment.plot_environment()
