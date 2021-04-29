@@ -2,6 +2,7 @@ from random import randint
 import numpy as np
 from time import sleep
 import matplotlib.pyplot as plt
+import matplotlib.widgets as widgets
 
 from Configure import parse_configs, print_configs
 
@@ -51,6 +52,7 @@ class Env:
             self.nest = (np.random.choice(np.arange(env_size)),np.random.choice(np.arange(env_size)))
         self.init_food_obstacles(food_num, max_wt, nest_range,obstacle_no)
         self.createColony(self.nest)
+        return self.get_state()
 
     def current_ant(self):
         if len(self.ants) > self.antIndex:
@@ -117,7 +119,8 @@ class Env:
         convert_input = lambda x : x[1:3]+x[5:6]+x[8:5:-1]+x[3:4]+x[0:1]
         food  = list(np.pad(self.state.food_space, (1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
         trail = list(np.pad(self.state.trail_space,(1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
-        return convert_input(food), convert_input(trail)
+        # return convert_input(food), convert_input(trail)
+        return convert_input(food) + convert_input(trail)
 
     # def get_reward(self, state, action):
     def get_reward(self, action):
@@ -129,10 +132,6 @@ class Env:
         return 0
 
     def step(self, action):
-        """ TODO depending on action, 
-        1. Change food_space. trail_space
-        2. Update the location of the ant
-        """
         reward = self.get_reward(action)
         if self.antIndex >= len(self.ants) - 1:
             # trail_len = 15
@@ -160,7 +159,6 @@ class Env:
         dr, dc = actions[action]
         nr = min(max(r+dr,0),self.state.grid_space.shape[0]-1)
         nc = min(max(c+dc,0),self.state.grid_space.shape[0]-1)
-        # current_ant.set((nr,nc))
         current_ant.location = (nr,nc)
         if pickup_food and self.state.food_space[nr,nc]:
             self.state.food_space[nr,nc] -= 1
@@ -173,39 +171,158 @@ class Env:
         return state, reward, self.done
 
 
-    def plot_environment(self):
+    def plot_environment(self,stepNum=-1):
         C,R = self.state.grid_space.shape
         oY, oX = np.where(self.state.grid_space>0)
         fY, fX = np.where(self.state.food_space>0)
         tY, tX = np.where(self.state.trail_space>0)
         # Foraging and non foraging ants 
-        # antFY, antFX = [],[]
-        # antNFY, antNFX = [],[]
-        # for a in self.actors:
-        #     ar,ac = a.get()
-        #     if a.foraging: 
-        #         antFY.append(ar)
-        #         antFX.append(ac)
-        #     else:
-        #         antNFY.append(ar)
-        #         antNFX.append(ac)
+        antFY, antFX = [],[]
+        antNFY, antNFX = [],[]
+        for a in self.ants:
+            ar,ac = a.get()
+            if a.foraging: 
+                antFY.append(ar)
+                antFX.append(ac)
+            else:
+                antNFY.append(ar)
+                antNFX.append(ac)
 
         # Plot the nest, ants, trails
         plt.clf()
+        if stepNum >= 0:
+            plt.annotate('Step: '+str(stepNum),(5,-1))
+        plt.annotate('Food Stored: '+str(self.totalFoodCollected),(7,-1))
+        plt.annotate('Food Left: '+str(self.state.remaining_food()),(10,-1))
         plt.axis([-1,C,R,-1])
         plt.scatter(self.nest[1],self.nest[0], color='#D95319', marker='s', s=70)   # Nest
         plt.scatter(tX,tY, color='#0072BD', s=4)                                    # Trail
         plt.scatter(fX, fY, color='#7E2F8E', s=15)
         plt.scatter(oX, oY, color='#000', s=15)                          # Food particles
-        plt.scatter(*tuple(zip(*[a.get() for a in self.ants])), color='#77AC30', s=30)
-        # plt.scatter(antFX, antFY, color='#77AC30', s=30)                            # Ants searching for food
-        # plt.scatter(antNFX, antNFY, color='#A2142F', s=30)                          # Ants returning with food
+        # plt.scatter(*tuple(zip(*[a.get() for a in self.ants])), color='#77AC30', s=30)
+        plt.scatter(antFX, antFY, color='#77AC30', s=30)                            # Ants searching for food
+        plt.scatter(antNFX, antNFY, color='#A2142F', s=30)                          # Ants returning with food
         plt.xticks(range(-1,C,C//10))
         plt.yticks(range(-1,R,R//10))
         plt.show()
+        close_button = widgets.Button(plt.axes([0.13, 0.89, 0.2, 0.06]), "Close", hovercolor = '0.975')
+        close_button.on_clicked(lambda x : exit())
         plt.pause(0.01)
 
+# class OriginalAntAgent:
 class AntAgent:
+    # def __init__(self,ID,env,
+    #                   nest,                          exploring=False,mean=0,sd=1):
+    # def __init__(self,nest,store_food,memory_size=20,exploring=False,mean=0,sd=0.5):
+    def __init__(self,ID,env,nest,memory_size=20,exploring=False,mean=0,sd=0.5):
+        self.antID = ID
+        self.env = env
+        self.nest = nest
+        self.location = nest
+        self.exploring = exploring
+        self.memory_size = memory_size
+        rads = np.array([0,45,90,135,180,-135,-90,-45])*np.pi/180
+        normal_dist = 1/(np.sqrt(2*np.pi)*sd) * np.exp(-0.5*((rads-mean)/sd)**2)
+        self.nd = list(normal_dist/np.sum(normal_dist))
+        self.memory = []
+        self.action_memory = 0
+        self.foraging = False
+        self.actions = [ (-1, 0), # North
+                         (-1, 1),
+                         ( 0, 1), # East
+                         ( 1, 1),
+                         ( 1, 0), # South
+                         ( 1,-1),
+                         ( 0,-1), # West
+                         (-1,-1), ]
+
+    def __call__(self,X):
+        return self.policy(X)
+
+    def set(self,l):
+        self.location = l
+
+    def get(self):
+        return self.location
+
+    def policy(self,X):
+        if len(self.memory) == self.memory_size+1:
+            self.memory.pop(0)
+        self.memory.append(self.location)
+        food, trail = X[:8],X[8:]
+        if self.location == self.nest and not self.foraging:
+            self.env.storeFood()
+            self.foraging = True
+            self.action_memory = randint(0,7)
+        if self.foraging:
+            act = self.explore(food,trail) if self.exploring else self.forage(food,trail)
+        else:
+            to_nest = self.to_nest()
+            for v,a in enumerate(self.actions):
+                if a not in to_nest:
+                    trail[v] = 0
+            trail[list(self.actions).index(to_nest[0])] += 0.5
+            act = np.argmax(trail) + 8
+        self.action_memory = act % 8
+        ret = [0]*32
+        ret[act] = 1
+        return ret
+
+    def explore(self,food,trail):
+        if max(food) > 0:
+            act = np.argmax(food) + 16
+            self.foraging = False
+        elif max(trail) > 0:
+            dist = max(abs(self.location[0]-self.nest[0]),abs(self.location[1]-self.nest[1]))
+            v = [idx for idx,val in enumerate(trail) if val!=0]
+            for i in np.arange(len(v)):
+                a = self.actions[v[i]]
+                next_step = (self.location[0]+a[0],self.location[1]+a[1])
+                dist2 = max(abs(next_step[0]-self.nest[0]),abs(next_step[1]-self.nest[1]))
+                if dist2 <= dist or next_step in self.memory:
+                    trail[v[i]] = 0
+            act = np.argmax(trail) if max(trail) > 0 else self.walk(food)
+        else:
+            act = self.walk(food)
+        return act
+
+    def forage(self,food,trail):
+        if max(food) > 0: 
+            act = np.argmax(food) + 16
+            self.foraging = False
+        elif max(trail) > 0:
+            dist = max(abs(self.location[0]-self.nest[0]),abs(self.location[1]-self.nest[1]))
+            v = [idx for idx,val in enumerate(trail) if val>0]
+            for i in np.arange(len(v)):
+                a = self.actions[v[i]]
+                next_step = (self.location[0]+a[0],self.location[1]+a[1])
+                dist2 = max(abs(next_step[0]-self.nest[0]),abs(next_step[1]-self.nest[1]))
+                if dist2 <= dist :
+                    trail[v[i]] = 0
+            act = np.argmax(trail) if max(trail) > 0 else self.walk(food)
+        else:
+            act = self.walk(food)
+        return act
+
+    def to_nest(self):
+        to_nest = (0,0)
+        if   self.location[0] < self.nest[0]: to_nest = ( 1, to_nest[1])
+        elif self.location[0] > self.nest[0]: to_nest = (-1, to_nest[1])
+        if   self.location[1] < self.nest[1]: to_nest = (to_nest[0],  1)
+        elif self.location[1] > self.nest[1]: to_nest = (to_nest[0], -1)
+        return [to_nest,(0,to_nest[1]),(to_nest[0],0)]
+
+    def walk(self,food):
+        pdist = self.nd[-1*self.action_memory:] + self.nd[:-1*self.action_memory]
+        step_idx = [idx for idx,val in enumerate(food) if val==-1]
+        if any(step_idx):
+            for i in step_idx:
+                pdist[i] = 0
+            pdist = pdist/sum(pdist)
+        return np.random.choice(8,p=pdist)
+
+# class AntAgent:
+class NewAntAgent:
     def __init__(self,ID,env,nest,exploring=False, mean=0, sd=1):
         self.antID = ID
         self.nest = nest
@@ -283,7 +400,7 @@ class AntAgent:
 def run(configs):
     environment = Env()
     state = environment.reset()
-    for _ in range(configs.max_steps):
+    for i in range(configs.max_steps):
         for ant in environment.ants:
             choice_dist = ant.policy(state)
             # print(ant.location,end=' ')
@@ -293,7 +410,7 @@ def run(configs):
             # print(action,end=' ')
             # print(ant.location)
             state=new_state
-        environment.plot_environment()
+        environment.plot_environment(i)
 
 
 if __name__=="__main__":
