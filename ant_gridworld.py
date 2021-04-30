@@ -65,11 +65,12 @@ class Env:
 
         self.state = Env.State(env_size)
         self.done = False
-        self.ants        = []
-        self.expl_ants   = []
-        self.has_food    = []
-        self.action_mem  = []
-        self.last_states = []
+        self.ants          = []
+        self.expl_ants     = []
+        self.has_food      = []
+        self.action_mem    = []
+        self.last_states   = []
+        self.ant_locations = []
 
         self.totalFoodCollected = 0
 
@@ -84,7 +85,6 @@ class Env:
         self.state_mem  = np.concatenate((np.ones((num_ants,memory_len)).reshape(num_ants,memory_len,1)*self.nest[0],np.ones((num_ants,memory_len)).reshape(num_ants,memory_len,1)*self.nest[0]),2)
 
         self.init_food_obstacles(food_num, max_wt, nest_range,obstacle_no)
-        # self.createColony(self.nest, num_ants)
         for idx in range(num_ants):
             self.addAntToColony(idx, self.nest, is_exploring=np.random.rand() <= 0.15)
 
@@ -130,14 +130,6 @@ class Env:
         self.food_locs = food_locs
         self.state.add_food(food_locs, foods)
 
-    def createColony(self, nest, num_ants = 10):
-        for idx in range(num_ants):
-            self.addAntToColony(idx, nest, is_exploring=np.random.rand() <= 0.15)
-            # if np.random.rand() > 0.15:
-            #     self.addAntToColony(idx, nest, is_exploring=False)
-            # else:
-            #     self.addAntToColony(idx, nest, is_exploring=True)
-
     def addAntToColony(self,idx, nest, is_exploring = "No_Arg" ):
         if is_exploring=="No_Arg":
             if len(self.expl_ants)/self.ants <= 0.15:
@@ -152,16 +144,33 @@ class Env:
         self.has_food.append(0)
         self.action_mem.append(0)
         self.last_states.append(self.nest)
+        self.ant_locations.append(self.nest)
 
     # def get_state(self, antID):
     def get_state(self):
         antID = self.current_ant().antID
-        r, c  = self.ants[antID].location
+        # r, c  = self.ants[antID].location
+        r, c  = self.ant_locations[antID]
         convert_input = lambda x : x[1:3]+x[5:6]+x[8:5:-1]+x[3:4]+x[0:1]
         obstacles  = list(np.pad(self.state.grid_space, (1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
         food  = list(np.pad(self.state.food_space, (1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
         trail = list(np.pad(self.state.trail_space,(1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
-        return convert_input(food) + convert_input(trail) + convert_input(obstacles) + [self.has_food[antID]] + [self.action_mem[antID]] + self.state_mem.flatten().tolist()
+
+        location = self.ant_locations[antID]
+        to_nest = [0,0]
+        if   location[0] < self.nest[0]: to_nest[0] =  1
+        elif location[0] > self.nest[0]: to_nest[0] = -1
+        if   location[1] < self.nest[1]: to_nest[1] =  1
+        elif location[1] > self.nest[1]: to_nest[1] = -1
+
+        return (  convert_input(food)
+                + convert_input(trail)
+                + convert_input(obstacles)
+                + [self.has_food[antID]]
+                + [self.action_mem[antID]]
+                + self.state_mem[antID].flatten().tolist()
+                + list(self.ant_locations[antID])
+                + to_nest)
 
     # def get_reward(self, state, action):
     def get_reward(self, action):
@@ -196,12 +205,14 @@ class Env:
         action %= 8
 
         current_ant = self.current_ant()
-        self.action_mem[current_ant.antID] = action + (8 if self.has_food[current_ant.antID] else 0)
-        r,c = current_ant.location
+        antID = current_ant.antID
+        self.action_mem[antID] = action + (8 if self.has_food[antID] else 0)
+        # r,c = current_ant.location
+        r,c = self.ant_locations[antID]
         dr, dc = actions[action]
         nr = min(max(r+dr,0),self.state.grid_space.shape[0]-1)
         nc = min(max(c+dc,0),self.state.grid_space.shape[0]-1)
-        current_ant.location = (nr,nc)
+        self.ant_locations[antID] = (nr,nc)
         if pickup_food and self.state.food_space[nr,nc]:
             self.state.food_space[nr,nc] -= 1
             self.state.food_space[self.state.food_space<0] = 0
@@ -232,7 +243,8 @@ class Env:
         antFY, antFX = [],[]
         antNFY, antNFX = [],[]
         for a in self.ants:
-            ar,ac = a.location
+            # ar,ac = a.location
+            ar,ac = self.ant_locations[a.antID]
             if self.has_food[a.antID]:
                 antFY.append(ar)
                 antFX.append(ac)
@@ -284,14 +296,15 @@ class AntAgent:
     #     return self.location
 
     def policy(self,X):
-        food, trail, obstacles, has_food, action_memory, state_memory = X[:8],X[8:16],X[16:24],X[24],X[25],X[26:]
+        food, trail, obstacles, has_food, action_memory, state_memory, location, to_nest = X[:8],X[8:16],X[16:24],X[24],X[25],X[26:66],tuple(X[66:]),X[68:]
         state_memory = [(int(x),int(y)) for x,y in zip(state_memory[::2],state_memory[1::2])]
+        to_nest = [tuple(to_nest),(0,to_nest[1]),(to_nest[0],0)]
         if action_memory > 7:
             action_memory = action_memory % 8 if has_food else randint(0,7)
         if not has_food:
-            act = self.explore(food,trail,action_memory,state_memory) if self.exploring else self.forage(food,trail,action_memory,state_memory)
+            act = self.explore(food,trail,action_memory,state_memory,location) if self.exploring else self.forage(food,trail,action_memory,state_memory,location)
         else:
-            to_nest = self.to_nest()
+            # to_nest = self.to_nest()
             for v,a in enumerate(self.actions):
                 if a not in to_nest:
                     trail[v] = 0
@@ -301,17 +314,17 @@ class AntAgent:
         ret[act] = 1
         return ret
 
-    def explore(self,food,trail,action_memory,state_memory):
+    def explore(self,food,trail,action_memory,state_memory,location):
         if max(food) > 0:
             act = np.argmax(food) + 16
             # self.foraging = False
             self.env.has_food[self.antID] = 1
         elif max(trail) > 0:
-            dist = max(abs(self.location[0]-self.nest[0]),abs(self.location[1]-self.nest[1]))
+            dist = max(abs(location[0]-self.nest[0]),abs(location[1]-self.nest[1]))
             v = [idx for idx,val in enumerate(trail) if val!=0]
             for i in np.arange(len(v)):
                 a = self.actions[v[i]]
-                next_step = (self.location[0]+a[0],self.location[1]+a[1])
+                next_step = (location[0]+a[0],location[1]+a[1])
                 dist2 = max(abs(next_step[0]-self.nest[0]),abs(next_step[1]-self.nest[1]))
                 if dist2 <= dist or next_step in state_memory:
                     trail[v[i]] = 0
@@ -320,17 +333,17 @@ class AntAgent:
             act = self.walk(food,action_memory)
         return act
 
-    def forage(self,food,trail,action_memory,state_memory):
+    def forage(self,food,trail,action_memory,state_memory,location):
         if max(food) > 0: 
             act = np.argmax(food) + 16
             # self.foraging = False
             self.env.has_food[self.antID] = 1
         elif max(trail) > 0:
-            dist = max(abs(self.location[0]-self.nest[0]),abs(self.location[1]-self.nest[1]))
+            dist = max(abs(location[0]-self.nest[0]),abs(location[1]-self.nest[1]))
             v = [idx for idx,val in enumerate(trail) if val>0]
             for i in np.arange(len(v)):
                 a = self.actions[v[i]]
-                next_step = (self.location[0]+a[0],self.location[1]+a[1])
+                next_step = (location[0]+a[0],location[1]+a[1])
                 dist2 = max(abs(next_step[0]-self.nest[0]),abs(next_step[1]-self.nest[1]))
                 if dist2 <= dist :
                     trail[v[i]] = 0
@@ -338,15 +351,6 @@ class AntAgent:
         else:
             act = self.walk(food,action_memory)
         return act
-
-    # TODO:
-    def to_nest(self):
-        to_nest = (0,0)
-        if   self.location[0] < self.nest[0]: to_nest = ( 1, to_nest[1])
-        elif self.location[0] > self.nest[0]: to_nest = (-1, to_nest[1])
-        if   self.location[1] < self.nest[1]: to_nest = (to_nest[0],  1)
-        elif self.location[1] > self.nest[1]: to_nest = (to_nest[0], -1)
-        return [to_nest,(0,to_nest[1]),(to_nest[0],0)]
 
     def walk(self,food,action_mem):
         pdist = self.nd[-1*action_mem:] + self.nd[:-1*action_mem]
