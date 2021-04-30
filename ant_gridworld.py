@@ -179,6 +179,59 @@ class Env:
         """
         # state = self.get_state()
         # ant = self.current_ant()
+         ###########################################
+        # r, c = ant.get()      # get current location
+        # ant_loc = (r+action[0], c+action[1])      # get new location
+        # food_val, trail_val, obstacle, is_explored = self.state.food_space[ant_loc],/
+        # self.state.trail_space[ant_loc],self.state.grid_space[ant_loc], self.state.explored_space[ant_loc]
+
+        # total_reward = 0
+        # if obstacle>0 :
+        #     total_reward += -1
+        # else:
+        #     ant.set(action)
+        #     if ant.is_exploring:
+        #         if ant.is_foraging:
+        #             if is_explored==0:  
+        #                 total_reward += 1
+        #                 self.state.explored_space[ant_loc] = 1
+        #             if food_val>0:
+        #                 total_reward += 10
+        #                 ant.is_foraging = False
+        #                 self.state.food_space[ant_loc] -= 1
+        #             elif trail_val>0:   total_reward += 0
+        #         else:
+        #             if ant_loc == self.nest:
+        #                 total_reward += 75
+        #                 ant.is_foraging = True
+        #                 self.storeFood()
+        #             else:
+        #                 total_reward += -1
+        #                 self.state.trail_space[ant_loc] += 1
+        #     else:
+        #         if ant.is_foraging:
+        #             if is_explored==0:  
+        #                 total_reward += 0
+        #                 self.state.explored_space[ant_loc] = 1
+        #             if food_val>0:
+        #                 total_reward += 5
+        #                 ant.is_foraging = False
+        #                 self.state.food_space[ant_loc] -= 1
+        #             elif trail_val>0:   total_reward += 1
+        #         else:
+        #             if ant_loc == self.nest:
+        #                 total_reward += 100
+        #                 ant.is_foraging = True
+        #                 self.storeFood()
+        #             elif trail_val>0:
+        #                 total_reward += -1
+        #                 self.state.trail_space[ant_loc] += 1
+        #             else:
+        #                 total_reward += -2
+        # if np.sum(self.state.food_space) == 0:
+        #     self.done = True
+        # return ant_loc, total_reward, self.done
+        ######################################
         return 0
 
     def step(self, action):
