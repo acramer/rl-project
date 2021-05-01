@@ -226,40 +226,47 @@ class Env:
         return 0
 
     def step(self, action):
+        antID = self.antIndex
         reward = self.get_reward(action)
-        if self.antIndex >= len(self.ants) - 1:
-            self.state.trail_space -= 0.05
-            self.state.trail_space[self.state.trail_space<0] = 0
-            self.done = self.totalFoodCollected == self.total_starting_food
 
         set_trail = bool(action//8)
         # pickup_food = bool(action//16)
         action %= 8
 
-        antID = self.antIndex
         self.action_mem[antID] = action + (8 if self.has_food[antID] else 0)
+
+        # Calculating Next States
         r,c = self.ant_locations[antID]
         dr,dc = self.actions[action]
         nr = min(max(r+dr,0),self.state.grid_space.shape[0]-1)
         nc = min(max(c+dc,0),self.state.grid_space.shape[0]-1)
         if self.state.grid_space[nr,nc]:
             nr,nc = r,c
+
         self.ant_locations[antID] = (nr,nc)
-        if self.has_food[antID] == 0 and self.state.food_space[nr,nc]:
+
+        if self.has_food[antID]:
+            if (nr,nc) == self.nest:
+                self.storeFood()
+                self.has_food[antID] = 0
+            else:
+                self.state.trail_space[nr,nc] += 1
+        elif self.state.food_space[nr,nc]:
             self.state.food_space[nr,nc] -= 1
             self.state.food_space[self.state.food_space<0] = 0
             self.has_food[antID] = 1
-        if set_trail and (nr,nc) != self.nest:
-            self.state.trail_space[nr,nc] += 1
-        elif (nr,nc) == self.nest and self.has_food[antID]:
-            self.storeFood()
-            self.has_food[antID] = 0
 
         next_state = self.get_state()
 
         self.last_states[antID] = (nr,nc)
         if self.antIndex >= len(self.ants) - 1:
             self.state_mem = np.concatenate((self.state_mem[:,1:],np.array(self.last_states).reshape(self.num_ants,1,2)),1)
+
+        # Decrementing Trail Space and Caculating Done
+        if self.antIndex >= len(self.ants) - 1:
+            self.state.trail_space -= 0.05
+            self.state.trail_space[self.state.trail_space<0] = 0
+            self.done = self.totalFoodCollected == self.total_starting_food
 
         # Next Ant
         self.antIndex = (self.antIndex + 1) % len(self.ants)
@@ -276,7 +283,6 @@ class Env:
         antFY, antFX = [],[]
         antNFY, antNFX = [],[]
         for a in self.ants:
-            # ar,ac = a.location
             ar,ac = self.ant_locations[a.antID]
             if self.has_food[a.antID]:
                 antFY.append(ar)
@@ -307,7 +313,6 @@ class Env:
 
 # class OriginalAntAgent:
 class AntAgent:
-    # def __init__(self,ID,env,nest,memory_size=20,exploring=False,mean=0,sd=0.5):
     def __init__(self,ID,env,memory_size=20,exploring=False,mean=0,sd=0.5):
         self.antID = ID
         self.env = env
@@ -326,15 +331,18 @@ class AntAgent:
         to_nest = [tuple(to_nest),(0,to_nest[1]),(to_nest[0],0)]
         if action_memory > 7:
             action_memory = action_memory % 8 if has_food else randint(0,7)
-        if not has_food:
-            act = self.explore(food,trail,action_memory,state_memory,location) if self.exploring else self.forage(food,trail,action_memory,state_memory,location)
-        else:
-            # to_nest = self.to_nest()
+        if has_food:
             for v,a in enumerate(self.actions):
                 if a not in to_nest:
                     trail[v] = 0
-            trail[list(self.actions).index(to_nest[0])] += 0.5
+            for oi,o in enumerate(obstacles):
+                if o:
+                    trail[oi] = -1
+            if to_nest[0] in self.actions:
+                trail[self.actions.index(to_nest[0])] += 0.5
             act = np.argmax(trail) + 8
+        else:
+            act = self.explore(food,trail,action_memory,state_memory,location) if self.exploring else self.forage(food,trail,action_memory,state_memory,location)
         ret = [0]*32
         ret[act] = 1
         return ret
@@ -342,8 +350,6 @@ class AntAgent:
     def explore(self,food,trail,action_memory,state_memory,location):
         if max(food) > 0:
             act = np.argmax(food) + 16
-            # self.foraging = False
-            self.env.has_food[self.antID] = 1
         elif max(trail) > 0:
             dist = max(abs(location[0]-self.env.nest[0]),abs(location[1]-self.env.nest[1]))
             v = [idx for idx,val in enumerate(trail) if val!=0]
@@ -361,8 +367,6 @@ class AntAgent:
     def forage(self,food,trail,action_memory,state_memory,location):
         if max(food) > 0: 
             act = np.argmax(food) + 16
-            # self.foraging = False
-            self.env.has_food[self.antID] = 1
         elif max(trail) > 0:
             dist = max(abs(location[0]-self.env.nest[0]),abs(location[1]-self.env.nest[1]))
             v = [idx for idx,val in enumerate(trail) if val>0]
