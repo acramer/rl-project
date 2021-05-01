@@ -1,4 +1,4 @@
-from random import randint
+from random import random, randint
 import numpy as np
 from time import sleep
 import matplotlib.pyplot as plt
@@ -17,7 +17,7 @@ ACTIONS = [ (-1, 0), # North
 
 plt.ion()
 
-class Env:
+class AntGridworld:
     class State:
         def __init__(self, env_size):
             self.grid_space = np.zeros((env_size, env_size))
@@ -42,6 +42,7 @@ class Env:
         def remaining_food(self):
             return np.sum(self.food_space)
 
+    # def __init__(self,env_size=20, food_num=15, num_ants=10, max_wt=5, nest_loc="center", nest_range=1, obstacle_no=10, memory_len=20, ant_agent=AntAgent):
     def __init__(self,env_size=20, food_num=15, num_ants=10, max_wt=5, nest_loc="center", nest_range=1, obstacle_no=10, memory_len=20):
         self.env_size    = env_size
         self.food_num    = food_num
@@ -51,10 +52,12 @@ class Env:
         self.nest_range  = nest_range
         self.obstacle_no = obstacle_no
         self.memory_len  = memory_len
+        # self.ant_agent   = ant_agent
+        self.ant_agent   = ProceduralAnt
         self.actions = ACTIONS
         self.reset()  
 
-    def reset(self, env_size=None, food_num=None, num_ants=None, max_wt=None, nest_loc=None, nest_range=None, obstacle_no=None, memory_len=None):
+    def reset(self, env_size=None, food_num=None, num_ants=None, max_wt=None, nest_loc=None, nest_range=None, obstacle_no=None, memory_len=None, ant_agent=None):
         if env_size    is None : env_size    = self.env_size   
         if food_num    is None : food_num    = self.food_num   
         if num_ants    is None : num_ants    = self.num_ants   
@@ -63,8 +66,9 @@ class Env:
         if nest_range  is None : nest_range  = self.nest_range 
         if obstacle_no is None : obstacle_no = self.obstacle_no
         if memory_len  is None : memory_len  = self.memory_len
+        if ant_agent   is None : ant_agent   = self.ant_agent
 
-        self.state = Env.State(env_size)
+        self.state = AntGridworld.State(env_size)
         self.done = False
         self.ants          = []
         self.expl_ants     = []
@@ -87,11 +91,11 @@ class Env:
 
         self.init_food_obstacles(food_num, max_wt, nest_range,obstacle_no)
         for idx in range(num_ants):
-            self.addAntToColony(idx, self.nest, is_exploring=np.random.rand() <= 0.15)
+            self.addAntToColony(idx)
 
         self.antIndex = 0
         self.total_starting_food = self.state.remaining_food()
-        print('Starting Food',self.total_starting_food)
+
         return self.get_state()
 
     def storeFood(self):
@@ -124,12 +128,11 @@ class Env:
         self.food_locs = food_locs
         self.state.add_food(food_locs, foods)
 
-    def addAntToColony(self,idx, nest, is_exploring=None):
-        if is_exploring is None:
-            is_exploring = len(self.expl_ants)/len(self.ants) <= 0.15
+    def addAntToColony(self, idx):
+        # is_exploring = len(self.expl_ants)/len(self.ants) <= 0.15
+        is_exploring = np.random.rand() <= 0.15
 
-        # ant = AntAgent(idx, self, nest, is_exploring)
-        ant = AntAgent(idx, self, is_exploring)
+        ant = self.ant_agent(idx, self, is_exploring)
         if is_exploring:
             self.expl_ants.append(ant)
 
@@ -229,10 +232,6 @@ class Env:
         antID = self.antIndex
         reward = self.get_reward(action)
 
-        set_trail = bool(action//8)
-        # pickup_food = bool(action//16)
-        action %= 8
-
         self.action_mem[antID] = action + (8 if self.has_food[antID] else 0)
 
         # Calculating Next States
@@ -274,11 +273,107 @@ class Env:
 
     def plot_environment(self,stepNum=-1):
         C,R = self.state.grid_space.shape
+        
+        # Object and Food markers 
         oY, oX = np.where(self.state.grid_space>0)
+        tY, tX = np.where(self.state.trail_space>0)
         fY, fX = np.where(self.state.food_space>0)
         fS = np.array([self.state.food_space[x,y] for x,y in zip(list(fY), list(fX))])
         fS /= self.max_wt/30
+
+        # Foraging and non foraging ants 
+        antFY, antFX = [],[]
+        antNFY, antNFX = [],[]
+        for a in self.ants:
+            ar,ac = self.ant_locations[a.antID]
+            if self.has_food[a.antID]:
+                antFY.append(ar)
+                antFX.append(ac)
+            else:
+                antNFY.append(ar)
+                antNFX.append(ac)
+
+        # Plot the nest, ants, trails
+        plt.clf()
+        if stepNum >= 0:
+            plt.annotate('Step: '+str(stepNum),(5,-1))
+        plt.annotate('Food Stored: '+str(self.totalFoodCollected),(7,-1))
+        plt.annotate('Food Left: '+str(self.state.remaining_food()),(11,-1))
+        plt.axis([-1,C,R,-1])
+        plt.scatter(self.nest[1],self.nest[0], color='#D95319', marker='s', s=70)   # Nest
+        plt.scatter(tX,tY, color='#0072BD', s=4)                                    # Trail
+        plt.scatter(fX, fY, color='#FF2FFF',marker='^',s=fS)
+        plt.scatter(oX, oY, color='#000000',marker='s',s=70)                        # Food particles
+        plt.scatter( antFX,  antFY, color='#77AC30', s=30)                          # Ants searching for food
+        plt.scatter(antNFX, antNFY, color='#A2142F', s=30)                          # Ants returning with food
+        plt.xticks(range(-1,C,C//10))
+        plt.yticks(range(-1,R,R//10))
+        plt.show()
+        close_button = widgets.Button(plt.axes([0.13, 0.89, 0.2, 0.06]), "Close", hovercolor = '0.975')
+        close_button.on_clicked(lambda x : exit())
+        plt.pause(0.01)
+
+class ProceduralEnvironment(AntGridworld):
+    def __init__(self,env_size=20, food_num=15, num_ants=10, max_wt=5, nest_loc="center", nest_range=1, obstacle_no=10, memory_len=20):
+        self.env_size    = env_size
+        self.food_num    = food_num
+        self.num_ants    = num_ants   
+        self.max_wt      = max_wt
+        self.nest_loc    = nest_loc
+        self.nest_range  = nest_range
+        self.obstacle_no = obstacle_no
+        self.memory_len  = memory_len
+        self.ant_agent   = ProceduralAnt
+        self.actions = ACTIONS
+        self.reset()  
+
+    def addAntToColony(self, idx):
+        is_exploring = np.random.rand() <= 0.15
+
+        ant = self.ant_agent(idx, self, is_exploring)
+        if is_exploring:
+            self.expl_ants.append(ant)
+
+        self.ants.append(ant)
+        self.has_food.append(0)
+        self.action_mem.append(0)
+        self.last_states.append(self.nest)
+        self.ant_locations.append(self.nest)
+
+    def get_state(self, antID=None):
+        antID = self.antIndex if antID is None else antID
+        r, c  = self.ant_locations[antID]
+        convert_input = lambda x : x[1:3]+x[5:6]+x[8:5:-1]+x[3:4]+x[0:1]
+        obstacles = list(np.pad(self.state.grid_space, (1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
+        food      = list(np.pad(self.state.food_space, (1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
+        trail     = list(np.pad(self.state.trail_space,(1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
+
+        location = self.ant_locations[antID]
+        to_nest = [0,0]
+        if   location[0] < self.nest[0]: to_nest[0] =  1
+        elif location[0] > self.nest[0]: to_nest[0] = -1
+        if   location[1] < self.nest[1]: to_nest[1] =  1
+        elif location[1] > self.nest[1]: to_nest[1] = -1
+
+        return (  convert_input(food)
+                + convert_input(trail)
+                + convert_input(obstacles)
+                + [self.has_food[antID]]
+                + [self.action_mem[antID]]
+                + self.state_mem[antID].flatten().tolist()
+                + list(self.ant_locations[antID])
+                + to_nest)
+
+    def plot_environment(self,stepNum=-1):
+        C,R = self.state.grid_space.shape
+        
+        # Object and Food markers 
+        oY, oX = np.where(self.state.grid_space>0)
         tY, tX = np.where(self.state.trail_space>0)
+        fY, fX = np.where(self.state.food_space>0)
+        fS = np.array([self.state.food_space[x,y] for x,y in zip(list(fY), list(fX))])
+        fS /= self.max_wt/30
+
         # Foraging and non foraging ants 
         antFY, antFX = [],[]
         antNFY, antNFX = [],[]
@@ -312,7 +407,7 @@ class Env:
         plt.pause(0.01)
 
 # class OriginalAntAgent:
-class AntAgent:
+class ProceduralAnt:
     def __init__(self,ID,env,memory_size=20,exploring=False,mean=0,sd=0.5):
         self.antID = ID
         self.env = env
@@ -332,15 +427,17 @@ class AntAgent:
         if action_memory > 7:
             action_memory = action_memory % 8 if has_food else randint(0,7)
         if has_food:
+            ntn = True
             for v,a in enumerate(self.actions):
-                if a not in to_nest:
-                    trail[v] = 0
-            for oi,o in enumerate(obstacles):
-                if o:
-                    trail[oi] = -1
-            if to_nest[0] in self.actions:
-                trail[self.actions.index(to_nest[0])] += 0.5
-            act = np.argmax(trail) + 8
+                if obstacles[v]:
+                    trail[v] = -1
+                elif a in to_nest and (location[0]+a[0],location[1]+a[1]) not in state_memory:
+                    trail[v] += 0.5
+                elif (location[0]+a[0],location[1]+a[1]) in state_memory:
+                    trail[v] = -1*random()
+                else:
+                    trail[v] = -0.5*random()
+            act = np.argmax(trail)
         else:
             act = self.explore(food,trail,action_memory,state_memory,location) if self.exploring else self.forage(food,trail,action_memory,state_memory,location)
         ret = [0]*32
@@ -349,7 +446,7 @@ class AntAgent:
 
     def explore(self,food,trail,action_memory,state_memory,location):
         if max(food) > 0:
-            act = np.argmax(food) + 16
+            act = np.argmax(food)
         elif max(trail) > 0:
             dist = max(abs(location[0]-self.env.nest[0]),abs(location[1]-self.env.nest[1]))
             v = [idx for idx,val in enumerate(trail) if val!=0]
@@ -366,7 +463,7 @@ class AntAgent:
 
     def forage(self,food,trail,action_memory,state_memory,location):
         if max(food) > 0: 
-            act = np.argmax(food) + 16
+            act = np.argmax(food)
         elif max(trail) > 0:
             dist = max(abs(location[0]-self.env.nest[0]),abs(location[1]-self.env.nest[1]))
             v = [idx for idx,val in enumerate(trail) if val>0]
@@ -412,7 +509,7 @@ class NewAntAgent:
 
 def run(configs):
     num_ants = 10
-    environment = Env(num_ants=num_ants)
+    environment = ProceduralEnvironment(num_ants=num_ants)
     done = False
     for i in range(configs.max_steps):
         for ant in environment.ants:
@@ -426,4 +523,8 @@ def run(configs):
 
 
 if __name__=="__main__":
-    run(parse_configs())
+    configs = parse_configs()
+    if configs.help:
+        print_configs()
+    else:
+        run(configs)
