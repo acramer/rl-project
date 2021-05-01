@@ -90,7 +90,7 @@ class ProceduralEnvironment(AntGridworld):
         plt.pause(0.01)
 
 class ProceduralAnt:
-    def __init__(self,ID,env,memory_size=20,exploring=False,mean=0,sd=0.5):
+    def __init__(self,ID,env,exploring=False,memory_size=20,mean=0,sd=0.5):
         self.antID = ID
         self.env = env
         self.exploring = exploring
