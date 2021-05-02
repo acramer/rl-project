@@ -102,7 +102,7 @@ class AntGridworld:
         r,c = self.ant_locations[self.antIndex] if loc is None else loc
         dr,dc = self.actions[action]
         nr = min(max(r+dr,0),self.state.grid_space.shape[0]-1)
-        nc = min(max(c+dc,0),self.state.grid_space.shape[0]-1)
+        nc = min(max(c+dc,0),self.state.grid_space.shape[1]-1)
         if avoid_obs and self.state.grid_space[nr,nc]:
             nr,nc = r,c
         return nr,nc
@@ -356,9 +356,18 @@ class TensorEnvironment(AntGridworld):
                     self.total_obs_pts.add(loc)
 
         def remaining_food(self):
-            return np.sum(self.food_space)
+            return self.food_space.sum()
 
     # TODO: learn embedding
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+
+    def reset(self,**kwargs):
+        super().reset(**kwargs)
+        self.state_mem = torch.cat((torch.ones((self.num_ants,self.memory_len,1))*self.nest[0],
+                                    torch.ones((self.num_ants,self.memory_len,1))*self.nest[1]),2)
+
+        return self.get_state()
 
     def get_state(self, antID=None):
         antID = self.antIndex if antID is None else antID
@@ -378,18 +387,14 @@ class TensorEnvironment(AntGridworld):
                                  trail,
                                  obstacles,
                                  torch.tensor([self.has_food[antID], self.action_mem[antID]]),
-                                 torch.tensor(self.state_mem[antID]).flatten(), # state_mem tensor?
+                                 self.state_mem[antID].flatten(),
                                  torch.tensor(self.ant_locations[antID]),
                                  to_nest,
                                ))
 
-    def calc_next_location(self,action,loc=None,avoid_obs=True):
-        r,c = self.ant_locations[self.antIndex] if loc is None else loc
-        dr,dc = self.actions[action]
-        nr = min(max(r+dr,0),self.state.grid_space.shape[0]-1)
-        nc = min(max(c+dc,0),self.state.grid_space.shape[0]-1)
-        if avoid_obs and self.state.grid_space[nr,nc]:
-            nr,nc = r,c
-        return nr,nc
-
+    def full_step_update(self):
+        self.state_mem = torch.cat((self.state_mem[:,1:],np.array(self.ant_locations).unsqueeze(1)),1)
+        self.state.trail_space -= 0.05
+        self.state.trail_space[self.state.trail_space<0] = 0
+        self.done = self.totalFoodCollected == self.total_starting_food
 
