@@ -110,13 +110,14 @@ class AntGridworld:
     def init_food_obstacles(self, food_num, max_wt, nest_range, obstacle_no):
         foods = np.random.choice(np.arange(1,max_wt+1),food_num,replace=True)
         # Area surrounding the nest with range nest_range
-        nest_area =  [(i,j) for j in range(self.nest[1]-nest_range, self.nest[1]+nest_range+1) \
-            if  j >= 0 and j < self.state.grid_space.shape[1] \
-                for i in range(self.nest[0]-nest_range, self.nest[0]+nest_range+1) \
-                    if  i >= 0 and i < self.state.grid_space.shape[0]]
+        rows,cols = self.state.grid_space.shape[0], self.state.grid_space.shape[1]
+        nx,ny = self.nest
+        nest_area =  [(i,j) for j in range(ny-nest_range, ny+nest_range+1) \
+            if  j >= 0 and j < cols \
+                for i in range(nx-nest_range, nx+nest_range+1) \
+                    if  i >= 0 and i < rows]
         # All the other points except nest_area
-        cand_points =  [(i,j) for i in np.arange(self.state.grid_space.shape[0]) for j in np.arange(self.state.grid_space.shape[1]) \
-             if (i,j) not in nest_area]
+        cand_points =  [(i,j) for i in range(rows) for j in range(cols) if (i,j) not in nest_area]
         
         obstacle_pts = np.random.choice(len(cand_points), obstacle_no, replace=False)
         for i in range(obstacle_no):
@@ -165,7 +166,8 @@ class AntGridworld:
 
     def get_reward(self, action):
         state = self.get_state()
-        ant = self.ants[self.antIndex]
+        antID = self.antIndex
+        ant = self.ants[antID]
 
         # Calculating Next Location
         nr,nc = self.calc_next_location(action,avoid_obs=False)
@@ -174,18 +176,22 @@ class AntGridworld:
         trail_val   =    self.state.trail_space[nr,nc]
         obstacle    =     self.state.grid_space[nr,nc]
         is_explored = self.state.explored_space[nr,nc] 
+        last_loc    = self.state_mem[antID][-1]
 
         total_reward = 0
         if obstacle > 0: 
             return -1 # total_reward += -1
 
-        exploring_rewards  = [  75, -1, -1,  1, 10,  0]
-        exploiting_rewards = [ 100, -1, -2,  0,  5,  1]
+        exploring_rewards  = [  75, -1, -1,  1, 10,  0, 1]
+        exploiting_rewards = [ 100, -1, -2,  0,  5,  1, 1]
+
+        # Squared distance to nest
+        nest_dist2 = lambda x:(x[0]-self.nest[0])**2+(x[1]-self.nest[1])**2
 
         rewards = exploiting_rewards
         if ant.type == 'exploring' :
             rewards = exploring_rewards
-        if self.has_food[self.antIndex]: # not ant.is_foraging
+        if self.has_food[antID]: # not ant.is_foraging
             if (nr,nc) == self.nest:
                 total_reward += rewards[0]
             elif trail_val>0:
@@ -199,6 +205,9 @@ class AntGridworld:
                 total_reward += rewards[4]
             elif trail_val>0:
                 total_reward += rewards[5]
+            # If returning reinforce getting closer to nest
+            if nest_dist2(last_loc) > nest_dist2((nr,nc)):
+                total_reward += rewards[6]
         return total_reward
 
     def step(self, action):
@@ -296,5 +305,91 @@ class AntAgent:
 
     def policy(self, state):
         return [1/len(self.actions)]*len(self.actions)
+
+
+class NumpyEnvironment(AntGridworld):
+    def get_state(self, antID=None):
+        antID = self.antIndex if antID is None else antID
+        r, c  = self.ant_locations[antID]
+        actView=[1,2,5,8,7,6,3,0]
+        obstacles = np.pad(self.state.grid_space, (1,1),constant_values=-1)[r:r+3,c:c+3].flatten()[actView]
+        food      = np.pad(self.state.food_space, (1,1),constant_values=-1)[r:r+3,c:c+3].flatten()[actView]
+        trail     = np.pad(self.state.trail_space,(1,1),constant_values=-1)[r:r+3,c:c+3].flatten()[actView]
+
+        to_nest = np.zeros(2)
+        if   r < self.nest[0]: to_nest[0] =  1
+        elif r > self.nest[0]: to_nest[0] = -1
+        if   c < self.nest[1]: to_nest[1] =  1
+        elif c > self.nest[1]: to_nest[1] = -1
+
+        return np.concatenate((food,
+                               # trail,
+                               # obstacles,
+                               [self.has_food[antID]],
+                               # self.action_mem[antID]],
+                               # self.state_mem[antID].flatten(),
+                               # self.ant_locations[antID],
+                               to_nest,
+                             ))
+
+class TensorEnvironment(AntGridworld):
+    class State:
+        def __init__(self, env_size):
+            self.grid_space     = torch.zeros((env_size, env_size))
+            self.food_space     = torch.zeros((env_size, env_size))
+            self.trail_space    = torch.zeros((env_size, env_size))
+            self.explored_space = torch.zeros((env_size, env_size))
+            self.total_obs_pts = set()
+            self.env_size = env_size
+
+        def add_food(self, food_locs, foods):
+            for i in range(len(foods)):
+                self.food_space[food_locs[i]] += foods[i]
+
+        def add_trail(self, location, weight):
+            self.trail_space[location] = weight
+
+        def add_obstacle(self, locations):
+            for loc in locations:
+                if loc[0]<self.env_size and loc[1]<self.env_size:
+                    self.grid_space[loc] = 1
+                    self.total_obs_pts.add(loc)
+
+        def remaining_food(self):
+            return np.sum(self.food_space)
+
+    # TODO: learn embedding
+
+    def get_state(self, antID=None):
+        antID = self.antIndex if antID is None else antID
+        r, c  = self.ant_locations[antID]
+        actView=[1,2,5,8,7,6,3,0]
+        obstacles = F.pad(self.state.grid_space, (1,1,1,1),value=-1)[r:r+3,c:c+3].flatten()[actView]
+        food      = F.pad(self.state.food_space, (1,1,1,1),value=-1)[r:r+3,c:c+3].flatten()[actView]
+        trail     = F.pad(self.state.trail_space,(1,1,1,1),value=-1)[r:r+3,c:c+3].flatten()[actView]
+
+        to_nest = torch.zeros(2)
+        if   r < self.nest[0]: to_nest[0] =  1
+        elif r > self.nest[0]: to_nest[0] = -1
+        if   c < self.nest[1]: to_nest[1] =  1
+        elif c > self.nest[1]: to_nest[1] = -1
+
+        return np.concatenate((  food,
+                                 trail,
+                                 obstacles,
+                                 torch.tensor([self.has_food[antID], self.action_mem[antID]]),
+                                 torch.tensor(self.state_mem[antID]).flatten(), # state_mem tensor?
+                                 torch.tensor(self.ant_locations[antID]),
+                                 to_nest,
+                               ))
+
+    def calc_next_location(self,action,loc=None,avoid_obs=True):
+        r,c = self.ant_locations[self.antIndex] if loc is None else loc
+        dr,dc = self.actions[action]
+        nr = min(max(r+dr,0),self.state.grid_space.shape[0]-1)
+        nc = min(max(c+dc,0),self.state.grid_space.shape[0]-1)
+        if avoid_obs and self.state.grid_space[nr,nc]:
+            nr,nc = r,c
+        return nr,nc
 
 
