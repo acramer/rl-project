@@ -1,11 +1,17 @@
 from Configure import parse_configs, print_configs
 from procedural_ant import ProceduralEnvironment 
 
+from centralized_q import CentralEnvironment
+
 import numpy as np
+
+Environments = {'procedural': ProceduralEnvironment,
+                'central-q':  CentralEnvironment,
+                }
 
 def main(configs):
     num_ants = 10
-    environment = ProceduralEnvironment(num_ants=num_ants)
+    environment = Environments[configs.architecture](num_ants=configs.num_ants,epochs=configs.epochs,max_steps=configs.max_steps,epsilon=configs.epsilon)
     done = False
     for i in range(configs.max_steps):
         for ant in environment.ants:

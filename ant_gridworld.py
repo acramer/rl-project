@@ -41,7 +41,7 @@ class AntGridworld:
         def remaining_food(self):
             return np.sum(self.food_space)
 
-    def __init__(self,ant_agent,env_size=20, food_num=15, num_ants=10, max_wt=5, nest_loc="center", nest_range=1, obstacle_no=10, memory_len=20):
+    def __init__(self,ant_agent,env_size=20, food_num=15, num_ants=10, max_wt=5, nest_loc="center", nest_range=1, obstacle_no=10, memory_len=20, **kwargs):
         self.ant_agent   = ant_agent
         self.env_size    = env_size
         self.food_num    = food_num
@@ -135,7 +135,7 @@ class AntGridworld:
         self.state.add_food(food_locs, foods)
 
     def addAntToColony(self, idx):
-        self.ants.append(self.ant_agent(idx, self, is_exploring))
+        self.ants.append(self.ant_agent(idx, self))
         self.has_food.append(0)
         self.action_mem.append(0)
         self.ant_locations.append(self.nest)
@@ -143,31 +143,29 @@ class AntGridworld:
     def get_state(self, antID=None):
         antID = self.antIndex if antID is None else antID
         r, c  = self.ant_locations[antID]
-        convert_input = lambda x : x[1:3]+x[5:6]+x[8:5:-1]+x[3:4]+x[0:1]
-        obstacles  = list(np.pad(self.state.grid_space, (1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
-        food  = list(np.pad(self.state.food_space, (1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
-        trail = list(np.pad(self.state.trail_space,(1,1),constant_values=-1)[r:r+3,c:c+3].flatten())
+        actView = [1,2,5,8,7,6,3,0]
+        obstacles = np.pad(self.state.grid_space, (1,1),constant_values=-1)[r:r+3,c:c+3].flatten()[actView]
+        food      = np.pad(self.state.food_space, (1,1),constant_values=-1)[r:r+3,c:c+3].flatten()[actView]
+        trail     = np.pad(self.state.trail_space,(1,1),constant_values=-1)[r:r+3,c:c+3].flatten()[actView]
 
-        location = self.ant_locations[antID]
         to_nest = [0,0]
-        if   location[0] < self.nest[0]: to_nest[0] =  1
-        elif location[0] > self.nest[0]: to_nest[0] = -1
-        if   location[1] < self.nest[1]: to_nest[1] =  1
-        elif location[1] > self.nest[1]: to_nest[1] = -1
+        if   r < self.nest[0]: to_nest[0] =  1
+        elif r > self.nest[0]: to_nest[0] = -1
+        if   c < self.nest[1]: to_nest[1] =  1
+        elif c > self.nest[1]: to_nest[1] = -1
 
-        return (  convert_input(food)
-                + convert_input(trail)
-                + convert_input(obstacles)
+        return (  list(food)
+                + list(trail)
+                + list(obstacles)
                 + [self.has_food[antID]]
                 + [self.action_mem[antID]]
-                + self.state_mem[antID].flatten().tolist()
+                + list(self.state_mem[antID].flatten())
                 + list(self.ant_locations[antID])
                 + to_nest)
 
     def get_reward(self, action):
         state = self.get_state()
-        antIDX = self.antIndex
-        ant = self.ants[antIDX]
+        ant = self.ants[self.antIndex]
 
         # Calculating Next Location
         nr,nc = self.calc_next_location(action,avoid_obs=False)
@@ -185,9 +183,9 @@ class AntGridworld:
         exploiting_rewards = [ 100, -1, -2,  0,  5,  1]
 
         rewards = exploiting_rewards
-        if False: #TODO: ant.is_exploring
+        if ant.type == 'exploring' :
             rewards = exploring_rewards
-        if self.has_food[antIDX]: # not ant.is_foraging
+        if self.has_food[self.antIndex]: # not ant.is_foraging
             if (nr,nc) == self.nest:
                 total_reward += rewards[0]
             elif trail_val>0:
@@ -195,9 +193,8 @@ class AntGridworld:
             else:
                 total_reward += rewards[2]
         else:
-            # TODO:
             if not is_explored:  
-                total_reward += rewards[3] #Why not above ^^^
+                total_reward += rewards[3]
             if food_val>0:
                 total_reward += rewards[4]
             elif trail_val>0:
@@ -287,23 +284,17 @@ class AntGridworld:
         close_button.on_clicked(lambda x : exit())
         plt.pause(0.01)
 
-# class AntAgent:
-class NewAntAgent:
-    def __init__(self,ID,env,nest,exploring=False, mean=0, sd=1):
+class AntAgent:
+    def __init__(self,ID,env,ant_type='normal'):
         self.antID = ID
-        self.nest = nest
-        self.location = nest
-        self.exploring = exploring
         self.env = env
+        self.type = ant_type
         self.actions = ACTIONS
 
-    def get(self):
-        return self.location
+    def __call__(self,X):
+        return self.policy(X)
 
     def policy(self, state):
         return [1/len(self.actions)]*len(self.actions)
-
-    def set(self, action):
-        self.location = (self.location[0] + action[0],self.location[1] + action[1])
 
 
