@@ -1,4 +1,6 @@
 from ant_gridworld import AntGridworld, AntAgent, ACTIONS
+import torch
+import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.widgets as widgets
@@ -8,7 +10,6 @@ from time import sleep
 from collections import defaultdict
 
 class NumpyEnvironment(AntGridworld):
-
     def get_state(self, antID=None):
         antID = self.antIndex if antID is None else antID
         r, c  = self.ant_locations[antID]
@@ -34,6 +35,31 @@ class NumpyEnvironment(AntGridworld):
                              ))
 
 class TensorEnvironment(AntGridworld):
+    class State:
+        def __init__(self, env_size):
+            self.grid_space     = torch.zeros((env_size, env_size))
+            self.food_space     = torch.zeros((env_size, env_size))
+            self.trail_space    = torch.zeros((env_size, env_size))
+            self.explored_space = torch.zeros((env_size, env_size))
+            self.total_obs_pts = set()
+            self.env_size = env_size
+
+        def add_food(self, food_locs, foods):
+            for i in range(len(foods)):
+                self.food_space[food_locs[i]] += foods[i]
+
+        def add_trail(self, location, weight):
+            self.trail_space[location] = weight
+
+        def add_obstacle(self, locations):
+            for loc in locations:
+                if loc[0]<self.env_size and loc[1]<self.env_size:
+                    self.grid_space[loc] = 1
+                    self.total_obs_pts.add(loc)
+
+        def remaining_food(self):
+            return np.sum(self.food_space)
+
     # TODO: learn embedding
 
     def get_state(self, antID=None):
@@ -59,6 +85,8 @@ class TensorEnvironment(AntGridworld):
                                self.ant_locations[antID],
                                to_nest,
                              ))
+
+
 
 class CentralEnvironment(NumpyEnvironment):
     def __init__(self,epochs=1,max_steps=600,epsilon=0.4,**kwargs):
@@ -87,11 +115,22 @@ class CentralEnvironment(NumpyEnvironment):
             print('Last Step:',i)
         self.reset()
 
-class DeepCentralEnvironment(NumpyEnvironment):
+class CQAnt(AntAgent):
+    def __init__(self,ID,env):
+        super().__init__(ID,env,'centralQ')
+
+    def policy(self,X):
+        # food, trail, obstacles, has_food, action_memory, state_memory, location, to_nest = X[:8],X[8:16],X[16:24],X[24],X[25],X[26:66],tuple(X[66:68]),X[68:]
+        ret = [0]*self.env.num_act
+        ret[np.argmax(self.env.Q[tuple(X)])] = 1
+        return ret
+
+
+class DeepCentralEnvironment(TensorEnvironment):
     def __init__(self,epochs=1,max_steps=600,epsilon=0.4,**kwargs):
-        super().__init__(CQAnt,**kwargs)
+        super().__init__(CDQAnt,**kwargs)
         self.num_act = 8 
-        self.Q = defaultdict(lambda: np.zeros(self.num_act))
+        self.Q = defaultdict(lambda: torch.zeros(self.num_act))
         self.train(epochs,max_steps,epsilon)
 
     def train(self,epochs=1,max_steps=600,epsilon=0.4,alpha=0.1,gamma=0.1):
@@ -118,17 +157,6 @@ class CDQAnt(AntAgent):
         super().__init__(ID,env,'centralDQ')
 
     def policy(self,X):
-        ret = [0]*self.env.num_act
-        ret[np.argmax(self.env.Q[tuple(X)])] = 1
-        return ret
-
-
-class CQAnt(AntAgent):
-    def __init__(self,ID,env):
-        super().__init__(ID,env,'centralQ')
-
-    def policy(self,X):
-        # food, trail, obstacles, has_food, action_memory, state_memory, location, to_nest = X[:8],X[8:16],X[16:24],X[24],X[25],X[26:66],tuple(X[66:68]),X[68:]
         ret = [0]*self.env.num_act
         ret[np.argmax(self.env.Q[tuple(X)])] = 1
         return ret
