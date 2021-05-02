@@ -20,7 +20,6 @@ class ProceduralEnvironment(AntGridworld):
         self.ants.append(ant)
         self.has_food.append(0)
         self.action_mem.append(0)
-        self.last_states.append(self.nest)
         self.ant_locations.append(self.nest)
 
     def get_state(self, antID=None):

@@ -18,9 +18,10 @@ plt.ion()
 class AntGridworld:
     class State:
         def __init__(self, env_size):
-            self.grid_space = np.zeros((env_size, env_size))
-            self.food_space = np.zeros((env_size, env_size))
-            self.trail_space = np.zeros((env_size, env_size))
+            self.grid_space     = np.zeros((env_size, env_size))
+            self.food_space     = np.zeros((env_size, env_size))
+            self.trail_space    = np.zeros((env_size, env_size))
+            self.explored_space = np.zeros((env_size, env_size))
             self.total_obs_pts = set()
             self.env_size = env_size
 
@@ -70,7 +71,6 @@ class AntGridworld:
         self.expl_ants     = []
         self.has_food      = []
         self.action_mem    = []
-        self.last_states   = []
         self.ant_locations = []
 
         self.totalFoodCollected = 0
@@ -83,7 +83,8 @@ class AntGridworld:
         elif nest_loc == 'random':
             self.nest = (np.random.choice(np.arange(env_size)),np.random.choice(np.arange(env_size)))
 
-        self.state_mem  = np.concatenate((np.ones((num_ants,memory_len)).reshape(num_ants,memory_len,1)*self.nest[0],np.ones((num_ants,memory_len)).reshape(num_ants,memory_len,1)*self.nest[0]),2)
+        self.state_mem = np.concatenate((np.ones((num_ants,memory_len)).reshape(num_ants,memory_len,1)*self.nest[0],
+                                         np.ones((num_ants,memory_len)).reshape(num_ants,memory_len,1)*self.nest[1]),2)
 
         self.init_food_obstacles(food_num, max_wt, nest_range,obstacle_no)
         for idx in range(num_ants):
@@ -98,14 +99,13 @@ class AntGridworld:
         self.totalFoodCollected += 1
 
     def calc_next_location(self,action,loc=None,avoid_obs=True):
-        r,c = self.ant_locations[antIDX] if loc is None else loc
+        r,c = self.ant_locations[self.antIndex] if loc is None else loc
         dr,dc = self.actions[action]
         nr = min(max(r+dr,0),self.state.grid_space.shape[0]-1)
         nc = min(max(c+dc,0),self.state.grid_space.shape[0]-1)
         if avoid_obs and self.state.grid_space[nr,nc]:
             nr,nc = r,c
         return nr,nc
-
 
     def init_food_obstacles(self, food_num, max_wt, nest_range, obstacle_no):
         foods = np.random.choice(np.arange(1,max_wt+1),food_num,replace=True)
@@ -138,7 +138,6 @@ class AntGridworld:
         self.ants.append(self.ant_agent(idx, self, is_exploring))
         self.has_food.append(0)
         self.action_mem.append(0)
-        self.last_states.append(self.nest)
         self.ant_locations.append(self.nest)
 
     def get_state(self, antID=None):
@@ -165,11 +164,7 @@ class AntGridworld:
                 + list(self.ant_locations[antID])
                 + to_nest)
 
-    # def get_reward(self, state, action):
     def get_reward(self, action):
-        """ TODO
-        as discussed, assign various rewards for various state,action pairs.
-        """
         state = self.get_state()
         antIDX = self.antIndex
         ant = self.ants[antIDX]
@@ -180,49 +175,33 @@ class AntGridworld:
         food_val    =     self.state.food_space[nr,nc]
         trail_val   =    self.state.trail_space[nr,nc]
         obstacle    =     self.state.grid_space[nr,nc]
-        #TODO: # is_explored = self.state.explored_space[nr,nc] 
-        is_explored = True
+        is_explored = self.state.explored_space[nr,nc] 
 
         total_reward = 0
         if obstacle > 0: 
             return -1 # total_reward += -1
 
-        exploring_rewards  = [1,10,0,75,-1,-1]
-        exploiting_rewards = [0,5,1,100,-1,-2]
+        exploring_rewards  = [  75, -1, -1,  1, 10,  0]
+        exploiting_rewards = [ 100, -1, -2,  0,  5,  1]
+
+        rewards = exploiting_rewards
         if False: #TODO: ant.is_exploring
-            if not self.has_food[antIDX]: # ant.is_foraging
-                # TODO:
-                if not is_explored:  
-                    total_reward += 1
-                    #TODO:move to step: self.state.explored_space[nr,nc] = 1 #Why not in else vvv
-                if food_val>0:
-                    total_reward += 10
-                elif trail_val>0:
-                    total_reward += 0
+            rewards = exploring_rewards
+        if self.has_food[antIDX]: # not ant.is_foraging
+            if (nr,nc) == self.nest:
+                total_reward += rewards[0]
+            elif trail_val>0:
+                total_reward += rewards[1]
             else:
-                if (nr,nc) == self.nest:
-                    total_reward += 75
-                elif trail_val>0:
-                    total_reward += -1
-                else:
-                    total_reward += -1
+                total_reward += rewards[2]
         else:
-            if not self.has_food[antIDX]: # ant.is_foraging
-                # TODO:
-                if not is_explored:  
-                    total_reward += 0
-                    #TODO:move to step: self.state.explored_space[nr,nc] = 1 #Why not in else vvv
-                if food_val>0:
-                    total_reward += 5
-                elif trail_val>0:
-                    total_reward += 1
-            else:
-                if (nr,nc) == self.nest:
-                    total_reward += 100
-                elif trail_val>0:
-                    total_reward += -1
-                else:
-                    total_reward += -2
+            # TODO:
+            if not is_explored:  
+                total_reward += rewards[3] #Why not above ^^^
+            if food_val>0:
+                total_reward += rewards[4]
+            elif trail_val>0:
+                total_reward += rewards[5]
         return total_reward
 
     def step(self, action):
@@ -233,41 +212,38 @@ class AntGridworld:
 
         # Calculating Next States
         nr,nc = self.calc_next_location(action)
-        # r,c = self.ant_locations[antID]
-        # dr,dc = self.actions[action]
-        # nr = min(max(r+dr,0),self.state.grid_space.shape[0]-1)
-        # nc = min(max(c+dc,0),self.state.grid_space.shape[0]-1)
-        # if self.state.grid_space[nr,nc]:
-        #     nr,nc = r,c
-
         self.ant_locations[antID] = (nr,nc)
+        self.state.explored_space[nr,nc] = 1
 
+        # Adding food and setting Trail
         if self.has_food[antID]:
             if (nr,nc) == self.nest:
                 self.storeFood()
                 self.has_food[antID] = 0
             else:
                 self.state.trail_space[nr,nc] += 1
+        # Setting food space if ant with no food walks over it
         elif self.state.food_space[nr,nc]:
             self.state.food_space[nr,nc] -= 1
             self.state.food_space[self.state.food_space<0] = 0
             self.has_food[antID] = 1
 
+        # Needed to be calculated before state_mem modified potentially
         next_state = self.get_state()
 
-        self.last_states[antID] = (nr,nc)
+        # If last ant, Update: State Memory, Trail Space, Done
         if self.antIndex >= len(self.ants) - 1:
-            self.state_mem = np.concatenate((self.state_mem[:,1:],np.array(self.last_states).reshape(self.num_ants,1,2)),1)
-
-        # Decrementing Trail Space and Caculating Done
-        if self.antIndex >= len(self.ants) - 1:
-            self.state.trail_space -= 0.05
-            self.state.trail_space[self.state.trail_space<0] = 0
-            self.done = self.totalFoodCollected == self.total_starting_food
+            self.full_step_update()
 
         # Next Ant
         self.antIndex = (self.antIndex + 1) % len(self.ants)
         return next_state, reward, self.done
+
+    def full_step_update(self):
+        self.state_mem = np.concatenate((self.state_mem[:,1:],np.array(self.ant_locations).reshape(self.num_ants,1,2)),1)
+        self.state.trail_space -= 0.05
+        self.state.trail_space[self.state.trail_space<0] = 0
+        self.done = self.totalFoodCollected == self.total_starting_food
 
     def plot_environment(self,stepNum=-1):
         C,R = self.state.grid_space.shape
