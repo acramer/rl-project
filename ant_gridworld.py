@@ -175,7 +175,7 @@ class AntGridworld:
         food_val    =     self.state.food_space[nr,nc]
         trail_val   =    self.state.trail_space[nr,nc]
         obstacle    =     self.state.grid_space[nr,nc]
-        is_explored = self.state.explored_space[nr,nc] 
+        is_explored = self.state.explored_space[nr,nc]
         last_loc    = self.state_mem[antID][-1]
 
         total_reward = 0
@@ -266,7 +266,7 @@ class AntGridworld:
         antNFY, antNFX = [],[]
         for a in self.ants:
             ar,ac = self.ant_locations[a.antID]
-            if self.has_food[a.antID]:
+            if not self.has_food[a.antID]:
                 antFY.append(ar)
                 antFX.append(ac)
             else:
