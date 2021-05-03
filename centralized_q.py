@@ -166,9 +166,14 @@ class SimpleClassifier(torch.nn.Module):
     def classify(self, x):
         return self.forward(x).argmax(dim=1)
 
-    def save_model(self, des=''):
+    def save_model(self,save_path, des=''):
         from os import path
-        return torch.save((self.state_dict(), self.params), path.join(path.dirname(path.abspath(__file__)), 'cls'+des+'.th'))
+        from pathlib import Path
+        save_dir = path.join(path.dirname(path.abspath(__file__)), save_path, des)
+        save_path = path.join(save_dir, 'model'+des+'.th')
+        Path(save_dir).mkdir(parents=True, exist_ok=True)
+        torch.save((self.state_dict(), self.params), save_path)
+        #return torch.save((self.state_dict(), self.params), path.join(path.dirname(path.abspath(__file__)), 'cls'+des+'.th'))
 
     def load_model(path='cls.th'):
         from os import path
@@ -203,7 +208,6 @@ class DeepCentralEnvironment(TensorEnvironment):
             self.model        = SimpleClassifier([self.state_size,self.state_size//2,self.num_act]).to(self._device)
             self.target_model = SimpleClassifier([self.state_size,self.state_size//2,self.num_act]).to(self._device)
 
-
         # TODO: learning args
         # Loss
         if args.huber: self.loss = torch.nn.SmoothL1Loss()
@@ -215,6 +219,7 @@ class DeepCentralEnvironment(TensorEnvironment):
         if args.step_schedule: self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', patience=4)
         if args.load_model_dir is None:
             self.train()
+        self.model.save_model(args.save_model_dir,args.description)
 
     def get_reward(self, action):
         state = self.get_state()

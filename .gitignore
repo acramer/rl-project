@@ -130,3 +130,7 @@ dmypy.json
 
 # File editing buffers
 *.swp
+
+# Model Files
+models/
+videos/
