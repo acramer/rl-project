@@ -118,7 +118,7 @@ class DeepCentralEnvironment(TensorEnvironment):
 
         total_reward = 0
         if obstacle > 0: 
-            return -10
+            return -100
 
         nest_dist2 = lambda x:(x[0]-self.nest[0])**2+(x[1]-self.nest[1])**2
 
@@ -138,15 +138,15 @@ class DeepCentralEnvironment(TensorEnvironment):
             else:
                 total_reward += rewards[5]
             if (nr,nc) == tuple(self.state_mem[antID][-1]):
-                total_reward += -5
+                total_reward += -10
             elif (nr,nc) == tuple(self.state_mem[antID][-2]):
-                total_reward += -5
+                total_reward += -10
         if (nr,nc) == tuple(self.state_mem[antID][-3]):
-            total_reward += -2
+            total_reward += -7
         if (nr,nc) == tuple(self.state_mem[antID][-4]):
-            total_reward += -1
+            total_reward += -5
         if (nr,nc) == tuple(self.state_mem[antID][-5]):
-            total_reward += -1
+            total_reward += -3
         return total_reward
 
     def get_state(self, antID=None):
@@ -180,6 +180,8 @@ class DeepCentralEnvironment(TensorEnvironment):
 
         for ei in range(self.args.epochs):
             state = self.soft_reset().to(self._device)
+            # state = self.reset().to(self._device)
+            # self.reset()
             total_rewards = 0
             total_loss = 0
             for i in range(self.args.max_steps):
@@ -227,7 +229,8 @@ class DeepCentralEnvironment(TensorEnvironment):
             if self.args.wandb:
                 wandb.log({"epoch":i,"rewards":total_rewards,"food_collected":int(self.totalFoodCollected)}, step=self.steps)
             print('E:{:4d} - {:>4d}/{:4d} - Steps:{:4d} - Loss:{:8.3f} - Rewards:{:5d}'.format(ei,int(self.totalFoodCollected),int(self.total_starting_food),i,total_loss,total_rewards))
-        self.soft_reset()
+        self.soft_reset().to(self._device)
+        # self.reset().to(self._device)
 
 
 class CDQAnt(AntAgent):
