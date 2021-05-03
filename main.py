@@ -12,7 +12,6 @@ Environments = {'procedural': ProceduralEnvironment,
                 }
 
 def main(configs):
-    num_ants = 10
     environment = Environments[configs.architecture](num_ants=configs.num_ants,epochs=configs.epochs,max_steps=configs.max_steps,epsilon=configs.epsilon)
     done = False
     if isinstance(environment,DecentralizedEnvironment):
