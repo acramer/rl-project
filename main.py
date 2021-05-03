@@ -44,6 +44,7 @@ def plot_average(configs):
     done = False
     avg_food_collected_over_time   = np.zeros(configs.max_steps)
     avg_reward_collected_over_time = np.zeros(configs.max_steps)
+    food_collected_over_epochs = np.zeros(configs.epochs)
     for ei in range(configs.epochs):
         food_coll = np.zeros(configs.max_steps)
         reward_coll = np.zeros(configs.max_steps)
@@ -57,17 +58,24 @@ def plot_average(configs):
             food_coll[i:] = environment.totalFoodCollected
             reward_coll[i:] = total_reward/environment.num_ants
 
-            if done or i+1==configs.max_steps:    
+            if done or i+1==configs.max_steps:
+                food_collected_over_epochs[ei] = environment.totalFoodCollected
                 environment.soft_reset()
                 break
+        
         avg_food_collected_over_time += food_coll
         avg_reward_collected_over_time += reward_coll
 
-    fig, ax = plt.subplots(2)
+    fig, ax = plt.subplots(3)
+    fig.set_size_inches(10, 8)
     ax[0].plot(avg_food_collected_over_time/configs.epochs)
-    ax[0].set(xlabel="Time step", ylabel="Average food collected")
+    ax[0].plot([0,configs.max_steps],[environment.total_starting_food,environment.total_starting_food],'k-')
+    ax[0].set(xlabel="Time step", ylabel="Avg. food coll.")
     ax[1].plot(avg_reward_collected_over_time/configs.epochs)
-    ax[1].set(xlabel="Time step", ylabel="Average reward obtained")
+    ax[1].set(xlabel="Time step", ylabel="Avg. reward coll.")
+    ax[2].plot(food_collected_over_epochs)
+    ax[2].plot([0,configs.epochs],[environment.total_starting_food,environment.total_starting_food],'k-')
+    ax[2].set(xlabel="Epochs", ylabel="Food coll.")
     fig.tight_layout()
     name = 'A-'+str(configs.architecture)+'-M-'+str(configs.max_steps)+'-E-'+str(configs.epochs)+'.png'
     fig.savefig(name)
