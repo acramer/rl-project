@@ -49,14 +49,13 @@ class CQAnt(AntAgent):
         return ret
 
 
-class DecentralizedEnvironment(NumpyEnvironment):
+class JointEnvironment(NumpyEnvironment):
     def __init__(self,epochs=1,max_steps=600,epsilon=0.4,**kwargs):
-        super().__init__(DQAnt,**kwargs)
+        super().__init__(JQAnt,**kwargs)
         self.num_act = 8 
         self.Q = defaultdict(lambda: np.zeros(self.num_act))
         self.rewards = []
         self.left_food = []
-        # self.train(epochs,max_steps,epsilon)
 
     # TODO: get hyper params epsilon,alpha,gamma
     def train(self,epochs=1,max_steps=600,epsilon=0.7,alpha=0.5,gamma=0.9):
@@ -81,18 +80,9 @@ class DecentralizedEnvironment(NumpyEnvironment):
             self.rewards.append(total_reward/self.num_ants)
             self.left_food.append(self.state.remaining_food())
 
-class DQAnt(AntAgent):
+class JQAnt(AntAgent):
     def __init__(self,ID,env):
-        super().__init__(ID,env,'decentralQ')
-        self.state = self.env.nest
-        self.rewards = []
-        self.action_memory = 0
-
-    # def policy(self,state):
-    #     # food, trail, obstacles, has_food, action_memory, state_memory, location, to_nest = X[:8],X[8:16],X[16:24],X[24],X[25],X[26:66],tuple(X[66:68]),X[68:]
-    #     ret = [epsilon/len(self.Q[state])]*len(self.Q[state])
-    #     ret[np.argmax(self.Q[state])] = 1 - epsilon + epsilon/len(self.Q[state])
-    #     return ret
+        super().__init__(ID,env,'jointQ')
 
 
 ####### CENTRALIZED DEEP Q-LEARNING #######
