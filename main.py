@@ -1,6 +1,6 @@
 from Configure import parse_configs, print_configs
 from procedural_ant import ProceduralEnvironment 
-from centralized_q import CentralEnvironment, JointEnvironment, DeepCentralEnvironment
+from centralized_q import CentralEnvironment, JointEnvironment, DecentralizedEnvironment, DeepCentralEnvironment
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,16 +8,17 @@ import matplotlib.pyplot as plt
 Environments = {'procedural': ProceduralEnvironment,
                 'central-q':  CentralEnvironment,
                 'joint-q': JointEnvironment,
+                'dec-q': DecentralizedEnvironment,
                 'deep-central-q': DeepCentralEnvironment,
                 }
 
 def main(configs):
-    environment = Environments[configs.architecture](num_ants=configs.num_ants,epochs=configs.epochs,max_steps=configs.max_steps,epsilon=configs.epsilon)
+    environment = Environments['dec-q'](num_ants=configs.num_ants,epochs=configs.epochs,max_steps=configs.max_steps,epsilon=configs.epsilon)
     done = False
-    if isinstance(environment,JointEnvironment):
-        configs.max_steps = 1000
+    if isinstance(environment,DecentralizedEnvironment):
+        configs.max_steps = 50000
     for i in range(configs.max_steps):
-        if isinstance(environment,JointEnvironment):
+        if isinstance(environment,DecentralizedEnvironment):
             environment.train()
         else:
             for ant in environment.ants:
@@ -30,12 +31,12 @@ def main(configs):
     print('Total Food:',environment.totalFoodCollected)
     print('Left Food:',environment.state.remaining_food())
     print('Last Step:',i)
-    if isinstance(environment,JointEnvironment):
+    if isinstance(environment,DecentralizedEnvironment):
         fig, ax = plt.subplots(2)
         ax[0].plot(environment.rewards)
         ax[1].plot(environment.left_food)
         plt.show()
-        plt.pause(60)
+        plt.pause(30)
     
 
 

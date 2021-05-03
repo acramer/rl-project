@@ -86,6 +86,43 @@ class JQAnt(AntAgent):
         super().__init__(ID,env,'jointQ')
 
 
+class DecentralizedEnvironment(NumpyEnvironment):
+    def __init__(self,epochs=1,max_steps=600,epsilon=0.4,**kwargs):
+        super().__init__(DecQAnt,**kwargs)
+        self.num_act = 8 
+        self.rewards = []
+        self.left_food = []
+
+    # TODO: get hyper params epsilon,alpha,gamma
+    def train(self,epochs=1,max_steps=600,epsilon=0.7,alpha=0.5,gamma=0.9):
+        def epsilon_pi(ant,observation):
+            ret = [epsilon/len(ant.Q[observation])]*len(ant.Q[observation])
+            ret[np.argmax(ant.Q[observation])] = 1 - epsilon + epsilon/len(ant.Q[observation])
+            return ret
+        for _ in range(epochs):
+            total_reward = 0
+            for idx, ant in enumerate(self.ants):
+                done = False
+                state = (self.ant_locations[idx],self.has_food[idx])
+                action = np.random.choice(list(range(self.num_act)),p=epsilon_pi(ant,state)) 
+                _ , reward, done = self.step(action)
+                total_reward += reward
+                next_state = (self.ant_locations[idx],self.has_food[idx])
+                ant.Q[state][action] = ant.Q[state][action] + alpha*(reward+gamma*max(ant.Q[next_state]) - ant.Q[state][action])
+                    # state = next_state
+                if done: break
+            self.state.trail_space = self.state.trail_space-0.05
+            self.state.trail_space[self.state.trail_space<0] = 0
+            self.rewards.append(total_reward/self.num_ants)
+            self.left_food.append(self.state.remaining_food())
+
+class DecQAnt(AntAgent):
+    def __init__(self,ID,env):
+        super().__init__(ID,env,'decQ')
+        self.Q = defaultdict(lambda: np.zeros(self.env.num_act))
+
+
+
 ####### CENTRALIZED DEEP Q-LEARNING #######
 
 # def _build_model(self):
