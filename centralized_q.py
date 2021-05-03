@@ -153,16 +153,16 @@ class DeepCentralEnvironment(TensorEnvironment):
     def __init__(self,epochs=1,max_steps=600,epsilon=0.4,load=False,replay_memory_size=100,**kwargs):
         super().__init__(CDQAnt,**kwargs)
         self.replay_memory_size = replay_memory_size
+        self._device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
         self.D = set()
         self.steps = 0
         if load:
-            self.model = SimpleClassifier.load()
+            self.model = SimpleClassifier.load().to(self._device)
         else:
-            self.model        = SimpleClassifier([self.state_size,self.state_size//2,self.num_act])
-            self.target_model = SimpleClassifier([self.state_size,self.state_size//2,self.num_act])
+            self.model        = SimpleClassifier([self.state_size,self.state_size//2,self.num_act]).to(self._device)
+            self.target_model = SimpleClassifier([self.state_size,self.state_size//2,self.num_act]).to(self._device)
 
-        # TODO: self._device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         # TODO: learning args
         # Loss
         # loss = torch.nn.CrossEntropyLoss()
@@ -212,8 +212,8 @@ class DeepCentralEnvironment(TensorEnvironment):
                     y.append(yt)
 
                 # x = np.array(x).unsqueeze(0)
-                x = torch.cat(x,0)
-                y = torch.cat(y,0)
+                x = torch.cat(x,0).to(self._device)
+                y = torch.cat(y,0).to(self._device)
 
                 # Loss
                 loss_val = self.loss(self.model(x), y)
@@ -247,54 +247,3 @@ class CDQAnt(AntAgent):
         ret[Q.argmax()] = 1
         return ret
 
-
-# import os
-# import random
-# from collections import deque
-# import tensorflow as tf
-# from keras import backend as bk
-# from keras.layers import Dense
-# from keras.models import Sequential
-# from keras.optimizers import Adam
-# from keras.losses import huber_loss
-# import numpy as np
-# from Solvers.Abstract_Solver import AbstractSolver
-# from lib import plotting
-# 
-#     def train_episode(self):
-#         state = self.env.reset()
-#         C = self.options.update_target_estimator_every
-# 
-#         pi = self.make_epsilon_greedy_policy()
-#         done = False
-# 
-#         while not done:
-#             choice_dist = pi(state)
-#             action = np.random.choice(list(range(len(choice_dist))),p=choice_dist)
-#             new_state, reward, done, _ = self.step(action)
-#             self.D.add((tuple(state),action,reward, None if done else tuple(new_state)))
-# 
-#             sample = list(self.D)
-#             if len(self.D) > self.options.replay_memory_size:
-#                 sample = random.sample(list(self.D),self.options.replay_memory_size)
-# 
-#             x = []
-#             y = []
-# 
-#             for pj,aj,rj,pnj in sample:
-#                 x.append(list(pj))
-#                 pj, pnj = np.array(pj), np.array(pnj)
-#                 yj = rj if np.any(pnj == np.array(None)) else rj + np.max(self.options.gamma*self.target_model.predict(pnj.reshape([1,-1])))
-#                 yt = self.model.predict(pj.reshape([1,-1]))[0].copy()
-#                 yt[aj] = yj
-#                 y.append(yt)
-# 
-#             x = np.array(x).reshape([-1, self.state_size])  # unsqueeze(0)
-#             y = np.array(y).reshape([-1, self.action_size]) # unsqueeze(0)
-#             self.model.fit(x,y, batch_size=self.options.batch_size, verbose=0) # grad zero, loss, backward, op.step
-# 
-#             self.steps += 1
-#             if not self.steps % C:
-#                 self.update_target_model()
-# 
-#             state = new_state
