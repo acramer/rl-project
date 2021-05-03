@@ -20,6 +20,30 @@ class CentralEnvironment(NumpyEnvironment):
         self.Q = defaultdict(lambda: np.zeros(self.num_act))
         self.train(epochs,max_steps,epsilon)
 
+    def get_state(self, antID=None):
+        antID = self.antIndex if antID is None else antID
+        r, c  = self.ant_locations[antID]
+        actView=[1,2,5,8,7,6,3,0]
+        obstacles = np.pad(self.state.grid_space, (1,1),constant_values=-1)[r:r+3,c:c+3].flatten()[actView]
+        food      = np.pad(self.state.food_space, (1,1),constant_values=-1)[r:r+3,c:c+3].flatten()[actView]
+        # trail     = np.pad(self.state.trail_space,(1,1),constant_values=-1)[r:r+3,c:c+3].flatten()[actView]
+
+        to_nest = np.zeros(2)
+        if   r < self.nest[0]: to_nest[0] =  1
+        elif r > self.nest[0]: to_nest[0] = -1
+        if   c < self.nest[1]: to_nest[1] =  1
+        elif c > self.nest[1]: to_nest[1] = -1
+
+        return np.concatenate((food-obstacles,
+                               # trail,
+                               # obstacles,
+                               [self.has_food[antID]],
+                               # self.action_mem[antID]],
+                               # self.state_mem[antID].flatten(),
+                               # self.ant_locations[antID],
+                               # to_nest,
+                             ))
+
     # TODO: get hyper params epsilon,alpha,gamma
     def train(self,epochs=1,max_steps=600,epsilon=0.7,alpha=0.5,gamma=0.9):
         def epsilon_pi(observation):

@@ -67,10 +67,9 @@ default_configs = {
     'description':       {'default': '',
                           'flags':   ['--des'],
                           'argparse':{'type':str,'help':'Model Description, used in folder and log naming.'}},
-    # TODO: Will implement
-    # 'mode':              {'default': 'train',
-    #                       'flags':   ['--mode'],
-    #                       'argparse':{'type':str,'choices':['train','test','verify','predict'],'help':'Program mode.  Options include: "train", "test", "verify", "predict"'}},
+    'mode':              {'default': 'train',
+                          'flags':   ['--mode'],
+                          'argparse':{'type':str,'choices':['train','average'],'help':'Program mode.  Options include: "train", "average"'}},
     'save_video':       {'default': False,
                           'flags':   ['--save_video','-v'],
                           'argparse':{'action':'store_true','help':'Savining video of simulation'}},

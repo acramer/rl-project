@@ -38,7 +38,30 @@ def generate_model_id(directory, des=''):
     mkdir(directory+'/'+description)
     return description
 
-def main(configs):
+def plot_average(configs):
+    configs.description = generate_model_id(configs.save_model_dir,configs.description)
+    environment = Environments[configs.architecture](args=configs,num_ants=configs.num_ants,epochs=configs.epochs,max_steps=configs.max_steps,epsilon=configs.epsilon)
+    done = False
+    food_per_step   = [0]*configs.max_steps
+    reward_per_step = [0]*configs.max_steps
+    for ei in range(configs.epochs):
+        for i in range(configs.max_steps):
+            total_reward = 0
+            for ant in environment.ants:
+                choice_dist = ant.policy(environment.get_state())
+                action = np.random.choice(list(range(len(choice_dist))),p=choice_dist)
+                state, reward, done = environment.step(action)
+                total_reward += reward
+            reward_per_step[i] += (total_reward                   - reward_per_step[i])/(ei+1)
+            food_per_step[i]   += (environment.totalFoodCollected - food_per_step[i]  )/(ei+1)
+            if done: break
+    fig, ax = plt.subplots(2)
+    ax[0].plot(reward_per_step)
+    ax[1].plot(food_per_step)
+    plt.show()
+    plt.pause(30)
+
+def train(configs):
     configs.description = generate_model_id(configs.save_model_dir,configs.description)
     environment = Environments[configs.architecture](args=configs,num_ants=configs.num_ants,epochs=configs.epochs,max_steps=configs.max_steps,epsilon=configs.epsilon)
     done = False
@@ -76,10 +99,18 @@ def main(configs):
         plt.show()
         plt.pause(30)
     
-
+def main(configs):
+    if configs.mode == 'average':
+        plot_average(configs)
+    else:
+        train(configs)
 
 if __name__=="__main__":
     configs = parse_configs()
+
+    if configs.architecture=='dec-q':
+        configs.max_steps = 50000
+
     if configs.help:
         print_configs()
     else:
