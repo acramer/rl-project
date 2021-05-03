@@ -42,8 +42,10 @@ def plot_average(configs):
     configs.description = generate_model_id(configs.save_model_dir,configs.description)
     environment = Environments[configs.architecture](args=configs,num_ants=configs.num_ants,epochs=configs.epochs,max_steps=configs.max_steps,epsilon=configs.epsilon)
     done = False
-    food_per_step   = [0]*configs.max_steps
-    reward_per_step = [0]*configs.max_steps
+    food_per_step   = np.zeros(configs.max_steps)
+    reward_per_step = np.zeros(configs.max_steps)
+    # food_per_step   = [0]*configs.max_steps
+    # reward_per_step = [0]*configs.max_steps
     for ei in range(configs.epochs):
         for i in range(configs.max_steps):
             total_reward = 0
@@ -58,8 +60,8 @@ def plot_average(configs):
             food_per_step[i] += environment.totalFoodCollected
             if done: break
     fig, ax = plt.subplots(2)
-    ax[0].plot(reward_per_step)
-    ax[1].plot(food_per_step)
+    ax[0].plot(reward_per_step/configs.epochs)
+    ax[1].plot(food_per_step/configs.epochs)
     plt.show()
     plt.pause(30)
 

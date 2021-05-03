@@ -6,6 +6,8 @@ from time import sleep
 import matplotlib.pyplot as plt
 import matplotlib.widgets as widgets
 
+from copy import deepcopy
+
 ACTIONS = [ (-1, 0), # North
             (-1, 1),
             ( 0, 1), # East
@@ -43,6 +45,19 @@ class AntGridworld:
         def remaining_food(self):
             return np.sum(self.food_space)
 
+        def set(self):
+            self.init_grid_space     =     self.grid_space.copy()
+            self.init_food_space     =     self.food_space.copy()
+            self.init_trail_space    =    self.trail_space.copy()
+            self.init_explored_space = self.explored_space.copy()
+
+        def reset(self):
+            self.grid_space     =     self.init_grid_space.copy() 
+            self.food_space     =     self.init_food_space.copy()    
+            self.trail_space    =    self.init_trail_space.copy()   
+            self.explored_space = self.init_explored_space.copy()
+            
+
     def __init__(self,ant_agent,env_size=20, food_num=15, num_ants=10, max_wt=5, nest_loc="center", nest_range=1, obstacle_no=10, memory_len=20, **kwargs):
         self.ant_agent   = ant_agent
         self.env_size    = env_size
@@ -55,6 +70,24 @@ class AntGridworld:
         self.memory_len  = memory_len
         self.actions = ACTIONS
         self.reset()  
+
+    def soft_reset(self):
+        env_size    = self.env_size   
+        num_ants    = self.num_ants   
+        memory_len  = self.memory_len
+
+        self.state.reset()
+        self.done = False
+        self.has_food      = [0]*num_ants
+        self.action_mem    = [0]*num_ants
+        self.ant_locations = [self.nest]*num_ants
+
+        self.totalFoodCollected = 0
+        self.state_mem = np.concatenate((np.ones((num_ants,memory_len,1))*self.nest[0],
+                                         np.ones((num_ants,memory_len,1))*self.nest[1]),2)
+        self.antIndex = 0
+
+        return self.get_state()
 
     def reset(self, env_size=None, food_num=None, num_ants=None, max_wt=None, nest_loc=None, nest_range=None, obstacle_no=None, memory_len=None, ant_agent=None):
         if env_size    is None : env_size    = self.env_size   
@@ -87,8 +120,6 @@ class AntGridworld:
 
         self.state_mem = np.concatenate((np.ones((num_ants,memory_len,1))*self.nest[0],
                                          np.ones((num_ants,memory_len,1))*self.nest[1]),2)
-        # self.state_mem = np.concatenate((np.ones((num_ants,memory_len)).reshape(num_ants,memory_len,1)*self.nest[0],
-        #                                  np.ones((num_ants,memory_len)).reshape(num_ants,memory_len,1)*self.nest[1]),2)
 
         self.init_food_obstacles(food_num, max_wt, nest_range,obstacle_no)
         for idx in range(num_ants):
@@ -96,6 +127,7 @@ class AntGridworld:
 
         self.antIndex = 0
         self.total_starting_food = self.state.remaining_food()
+        self.state.set()
 
         return self.get_state()
 
@@ -377,6 +409,18 @@ class TensorEnvironment(AntGridworld):
         def remaining_food(self):
             return self.food_space.sum()
 
+        def set(self):
+            self.init_grid_space     =     self.grid_space.clone()
+            self.init_food_space     =     self.food_space.clone()
+            self.init_trail_space    =    self.trail_space.clone()
+            self.init_explored_space = self.explored_space.clone()
+
+        def reset(self):
+            self.grid_space     =     self.init_grid_space.clone() 
+            self.food_space     =     self.init_food_space.clone()    
+            self.trail_space    =    self.init_trail_space.clone()   
+            self.explored_space = self.init_explored_space.clone()
+
     def __init__(self,ant_agent,**kwargs):
         super().__init__(ant_agent,**kwargs)
         self.num_act = 8 
@@ -430,6 +474,25 @@ class TensorEnvironment(AntGridworld):
 
         self.antIndex = 0
         self.total_starting_food = self.state.remaining_food()
+        self.state.set()
+
+        return self.get_state()
+
+    def soft_reset(self):
+        env_size    = self.env_size   
+        num_ants    = self.num_ants   
+        memory_len  = self.memory_len
+
+        self.state.reset()
+        self.done = False
+        self.has_food      = [0]*num_ants
+        self.action_mem    = [0]*num_ants
+        self.ant_locations = [self.nest]*num_ants
+
+        self.totalFoodCollected = 0
+        self.state_mem = torch.cat((torch.ones((num_ants,memory_len,1))*self.nest[0],
+                                    torch.ones((num_ants,memory_len,1))*self.nest[1]),2)
+        self.antIndex = 0
 
         return self.get_state()
 

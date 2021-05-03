@@ -91,7 +91,6 @@ class DeepCentralEnvironment(TensorEnvironment):
                 wandb.init(name=args.description, config=args, project="rl-project")
             wandb.watch(self.model)
 
-        # TODO: learning args
         # Loss
         if args.huber: self.loss = torch.nn.SmoothL1Loss()
         else:          self.loss = torch.nn.CrossEntropyLoss()
@@ -119,7 +118,7 @@ class DeepCentralEnvironment(TensorEnvironment):
 
         total_reward = 0
         if obstacle > 0: 
-            return -100
+            return -10
 
         nest_dist2 = lambda x:(x[0]-self.nest[0])**2+(x[1]-self.nest[1])**2
 
@@ -139,15 +138,15 @@ class DeepCentralEnvironment(TensorEnvironment):
             else:
                 total_reward += rewards[5]
             if (nr,nc) == tuple(self.state_mem[antID][-1]):
-                total_reward += -10
+                total_reward += -5
             elif (nr,nc) == tuple(self.state_mem[antID][-2]):
-                total_reward += -10
+                total_reward += -5
         if (nr,nc) == tuple(self.state_mem[antID][-3]):
-            total_reward += -5
-        if (nr,nc) == tuple(self.state_mem[antID][-4]):
-            total_reward += -3
-        if (nr,nc) == tuple(self.state_mem[antID][-5]):
             total_reward += -2
+        if (nr,nc) == tuple(self.state_mem[antID][-4]):
+            total_reward += -1
+        if (nr,nc) == tuple(self.state_mem[antID][-5]):
+            total_reward += -1
         return total_reward
 
     def get_state(self, antID=None):
@@ -157,15 +156,14 @@ class DeepCentralEnvironment(TensorEnvironment):
         obstacles = F.pad(self.state.grid_space, (1,1,1,1),value=-1)[r:r+3,c:c+3].flatten()[actView]
         food      = F.pad(self.state.food_space, (1,1,1,1),value=-1)[r:r+3,c:c+3].flatten()[actView]
         trail     = F.pad(self.state.trail_space,(1,1,1,1),value=-1)[r:r+3,c:c+3].flatten()[actView]
-
         to_nest = torch.zeros(2)
+
         if   r < self.nest[0]: to_nest[0] =  1
         elif r > self.nest[0]: to_nest[0] = -1
         if   c < self.nest[1]: to_nest[1] =  1
         elif c > self.nest[1]: to_nest[1] = -1
 
         return torch.cat((  food-obstacles,
-
                             trail,
                             torch.tensor([self.has_food[antID], self.action_mem[antID]]),
                             self.state_mem[antID].flatten(),
@@ -181,7 +179,7 @@ class DeepCentralEnvironment(TensorEnvironment):
             return ret
 
         for ei in range(self.args.epochs):
-            state = self.reset().to(self._device)
+            state = self.soft_reset().to(self._device)
             total_rewards = 0
             total_loss = 0
             for i in range(self.args.max_steps):
@@ -229,7 +227,7 @@ class DeepCentralEnvironment(TensorEnvironment):
             if self.args.wandb:
                 wandb.log({"epoch":i,"rewards":total_rewards,"food_collected":int(self.totalFoodCollected)}, step=self.steps)
             print('E:{:4d} - {:>4d}/{:4d} - Steps:{:4d} - Loss:{:8.3f} - Rewards:{:5d}'.format(ei,int(self.totalFoodCollected),int(self.total_starting_food),i,total_loss,total_rewards))
-        self.reset()
+        self.soft_reset()
 
 
 class CDQAnt(AntAgent):
