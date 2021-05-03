@@ -1,28 +1,28 @@
 gpu: setup-gpu
 	echo [MAKE - gpu]
 	for n in 1 2 3 4 5 ; do \
-	gcloud compute ssh alan --command 'nohup ./rl-project/scripts/cloud_script.sh &> log.txt < /dev/null &' && echo 'SSH successful' && break; \
+	gcloud compute ssh alan --command 'nohup ./rl-project/gpu_scripts/scripts/cloud_script.sh &> log.txt < /dev/null &' && echo 'SSH successful' && break; \
 	sleep 5; \
 	done
 
 gpu-next: check-gpu
 	echo [MAKE - gpu-soft-kill]
 	for n in 1 2 3 4 5 ; do \
-	gcloud compute ssh alan --command 'nohup ./rl-project/scripts/cloud_next.sh &> log.txt < /dev/null &' && echo 'SSH successful' && break; \
+	gcloud compute ssh alan --command 'nohup ./rl-project/gpu_scripts/scripts/cloud_next.sh &> log.txt < /dev/null &' && echo 'SSH successful' && break; \
 	sleep 5; \
 	done
 
 over-gpu: setup-gpu
 	echo [MAKE - over-gpu]
 	for n in 1 2 3 4 5 ; do \
-	gcloud compute ssh alan --command 'nohup ./rl-project/scripts/cloud_script.sh &> log.txt < /dev/null &' && echo 'SSH successful' && break; \
+	gcloud compute ssh alan --command 'nohup ./rl-project/gpu_scripts/scripts/cloud_script.sh &> log.txt < /dev/null &' && echo 'SSH successful' && break; \
 	sleep 5; \
 	done
 
 under-gpu:
 	echo [MAKE - under-gpu]
 	for n in 1 2 3 4 5 ; do \
-	gcloud compute ssh alan --command 'nohup ./rl-project/scripts/cloud_script.sh &> log.txt < /dev/null &' && echo 'SSH successful' && break; \
+	gcloud compute ssh alan --command 'nohup ./rl-project/gpu_scripts/scripts/cloud_script.sh &> log.txt < /dev/null &' && echo 'SSH successful' && break; \
 	sleep 5; \
 	done
 
@@ -43,6 +43,6 @@ gpu-kill: check-gpu
 gpu-soft-kill: check-gpu
 	echo [MAKE - gpu-soft-kill]
 	for n in 1 2 3 4 5 ; do \
-	gcloud compute ssh alan --command 'nohup ./rl-project/scripts/cloud_kill.sh &> log.txt < /dev/null &' && echo 'SSH successful' && break; \
+	gcloud compute ssh alan --command 'nohup ./rl-project/gpu_scripts/scripts/cloud_kill.sh &> log.txt < /dev/null &' && echo 'SSH successful' && break; \
 	sleep 5; \
 	done
