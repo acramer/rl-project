@@ -178,7 +178,7 @@ class SimpleClassifier(torch.nn.Module):
         return r
 
 class DeepCentralEnvironment(TensorEnvironment):
-    def __init__(self,args,replay_memory_size=100,memory_len=10,**kwargs):
+    def __init__(self,args,updates_interval=100,memory_len=10,**kwargs):
         super().__init__(CDQAnt,memory_len=memory_len,**kwargs)
 
         # State Size
@@ -192,7 +192,7 @@ class DeepCentralEnvironment(TensorEnvironment):
         self.state_size = 48
 
         self.args = args
-        self.replay_memory_size = replay_memory_size
+        self.updates_interval = updates_interval
         self._device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
         self.D = set()
@@ -206,18 +206,15 @@ class DeepCentralEnvironment(TensorEnvironment):
 
         # TODO: learning args
         # Loss
-        # SmoothL1 == Huber Loss
         if args.huber: self.loss = torch.nn.SmoothL1Loss()
         else:          self.loss = torch.nn.CrossEntropyLoss()
         # Optimizer
-        #self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001, weight_decay=1e-5)
         if args.adam: self.optimizer = torch.optim.Adam(self.model.parameters(), lr=args.learning_rate, weight_decay=1e-5)
         else:         self.optimizer = torch.optim.SGD( self.model.parameters(), lr=args.learning_rate, momentum=0.9, weight_decay=1e-3)
         # Step Scheduler
-        #                      self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', patience=4)
         if args.step_schedule: self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', patience=4)
         if args.load_model_dir is None:
-            self.train(args.epochs,args.max_steps,args.epsilon)
+            self.train()
 
     def get_reward(self, action):
         state = self.get_state()
@@ -287,32 +284,32 @@ class DeepCentralEnvironment(TensorEnvironment):
                             to_nest,
                           ))
 
-    def train(self,epochs=1,max_steps=600,epsilon=0.4,alpha=0.1,gamma=0.1,updates_interval=10):
+    def train(self):
         def epsilon_pi(state):
             Q = self.model(state.unsqueeze(0))
-            explore_prob = epsilon/self.num_act
+            explore_prob = self.args.epsilon/self.num_act
             ret = [explore_prob]*self.num_act
-            ret[Q.argmax()] = 1 - epsilon + explore_prob
+            ret[Q.argmax()] = 1 - self.args.epsilon + explore_prob
             return ret
 
-        for ei in range(epochs):
+        for ei in range(self.args.epochs):
             state = self.reset()
             total_rewards = 0
             total_loss = 0
-            for i in range(max_steps):
+            for i in range(self.args.max_steps):
                 action = np.random.choice(list(range(self.num_act)),p=epsilon_pi(state))
                 next_state, reward, done = self.step(action)
                 total_rewards += reward
                 self.D.add((state,action,reward, None if done else next_state))
 
                 sample = list(self.D)
-                if len(self.D) > self.replay_memory_size:
-                    sample = Sample(list(self.D),self.replay_memory_size)
+                if len(self.D) > self.args.batch_size:
+                    sample = Sample(list(self.D), self.args.batch_size)
 
                 x,y = [],[]
                 for pj,aj,rj,pnj in sample:
                     x.append(pj)
-                    yj = rj if pnj is None else rj + gamma*self.target_model(pnj.unsqueeze(0)).max()
+                    yj = rj if pnj is None else rj + self.args.gamma*self.target_model(pnj.unsqueeze(0)).max()
                     yt = self.model(pj.unsqueeze(0)).clone()
                     yt[0,aj] = yj
                     y.append(yt)
@@ -329,7 +326,7 @@ class DeepCentralEnvironment(TensorEnvironment):
                 total_loss += loss_val.item()
 
                 self.steps += 1
-                if not self.steps % updates_interval:
+                if not self.steps % self.updates_interval:
                     self.target_model.load_state_dict(deepcopy(self.model.state_dict()))
 
                 state = next_state
@@ -338,7 +335,6 @@ class DeepCentralEnvironment(TensorEnvironment):
             # Step Learning Rate
             if self.args.step_schedule:
                 scheduler.step(total_loss)
-            # self.scheduler.step(total_loss)
             print('E:{:4d} - {:>4d}/{:4d} - Steps:{:4d} - Loss:{:8.3f} - Rewards:{:5d}'.format(ei,int(self.totalFoodCollected),int(self.total_starting_food),i,total_loss,total_rewards))
         self.reset()
 
