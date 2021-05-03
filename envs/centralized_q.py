@@ -80,71 +80,74 @@ class JointEnvironment(NumpyEnvironment):
         super().__init__(JQAnt,**kwargs)
         self.num_act = 8 
         self.Q = defaultdict(lambda: np.zeros(self.num_act))
-        self.rewards = []
-        self.left_food = []
+        self.epsilon = 0.5
 
-    # TODO: get hyper params epsilon,alpha,gamma
-    def train(self,epochs=1,max_steps=600,epsilon=0.7,alpha=0.5,gamma=0.9):
-        def epsilon_pi(observation):
-            ret = [epsilon/len(self.Q[observation])]*len(self.Q[observation])
-            ret[np.argmax(self.Q[observation])] = 1 - epsilon + epsilon/len(self.Q[observation])
-            return ret
-        for _ in range(epochs):
-            total_reward = 0
-            for i in np.arange(self.num_ants):
-                done = False
-                state = (self.ant_locations[i],self.has_food[i])
-                action = np.random.choice(list(range(self.num_act)),p=epsilon_pi(state)) 
-                _ , reward, done = self.step(action)
-                total_reward += reward
-                next_state = (self.ant_locations[i],self.has_food[i])
-                self.Q[state][action] = self.Q[state][action] + alpha*(reward+gamma*max(self.Q[next_state])- self.Q[state][action])
-                    # state = next_state
-                if done: break
-            self.state.trail_space = self.state.trail_space-0.05
-            self.state.trail_space[self.state.trail_space<0] = 0
-            self.rewards.append(total_reward/self.num_ants)
-            self.left_food.append(self.state.remaining_food())
+    def train(self,state,action,reward,next_state,epochs=1,epsilon=0.7,alpha=0.5,gamma=0.9):
+        self.Q[state][action] += alpha * (reward + gamma * max(self.Q[next_state]) - \
+            self.Q[state][action])
+
+    def get_state(self):
+        idx = self.antIndex
+        return (self.ant_locations[idx],self.has_food[idx])
+
+    def step(self,action):
+        idx = self.antIndex
+        state = (self.ant_locations[idx], self.has_food[idx])
+        _, reward, done = super().step(action)
+        next_state = (self.ant_locations[idx], self.has_food[idx])
+        self.train(state,action,reward,next_state)
+        if done:
+            self.reset()
+        return next_state, reward, done
 
 class JQAnt(AntAgent):
     def __init__(self,ID,env):
         super().__init__(ID,env,'jointQ')
+
+    def policy(self,state):
+        epsilon = self.env.epsilon
+        probs = [epsilon/len(self.env.Q[state])]*len(self.env.Q[state])
+        probs[np.argmax(self.env.Q[state])] = 1 - epsilon + epsilon/len(self.env.Q[state])
+        return probs
 
 
 class DecentralizedEnvironment(NumpyEnvironment):
     def __init__(self,epochs=1,max_steps=600,epsilon=0.4,**kwargs):
         super().__init__(DecQAnt,**kwargs)
         self.num_act = 8 
-        self.rewards = []
-        self.left_food = []
+        self.epsilon = 0.5
 
-    # TODO: get hyper params epsilon,alpha,gamma
-    def train(self,epochs=1,max_steps=600,epsilon=0.7,alpha=0.5,gamma=0.9):
-        def epsilon_pi(ant,observation):
-            ret = [epsilon/len(ant.Q[observation])]*len(ant.Q[observation])
-            ret[np.argmax(ant.Q[observation])] = 1 - epsilon + epsilon/len(ant.Q[observation])
-            return ret
-        for _ in range(epochs):
-            total_reward = 0
-            for idx, ant in enumerate(self.ants):
-                done = False
-                state = (self.ant_locations[idx],self.has_food[idx])
-                action = np.random.choice(list(range(self.num_act)),p=epsilon_pi(ant,state)) 
-                _ , reward, done = self.step(action)
-                total_reward += reward
-                next_state = (self.ant_locations[idx],self.has_food[idx])
-                ant.Q[state][action] = ant.Q[state][action] + alpha*(reward+gamma*max(ant.Q[next_state]) - ant.Q[state][action])
-                    # state = next_state
-                if done: break
-            self.state.trail_space = self.state.trail_space-0.05
-            self.state.trail_space[self.state.trail_space<0] = 0
-            self.rewards.append(total_reward/self.num_ants)
-            self.left_food.append(self.state.remaining_food())
+    def train(self,idx,state,action,reward,next_state,epochs=1,epsilon=0.7,alpha=0.5,gamma=0.9):
+        self.ants[idx].Q[state][action] += alpha * (reward + gamma * max(self.ants[idx].Q[next_state]) - \
+            self.ants[idx].Q[state][action])
+
+    def get_state(self):
+        idx = self.antIndex
+        return (self.ant_locations[idx],self.has_food[idx])
+
+    def step(self,action):
+        idx = self.antIndex
+        state = (self.ant_locations[idx], self.has_food[idx])
+        _, reward, done = super().step(action)
+        next_state = (self.ant_locations[idx], self.has_food[idx])
+        self.train(idx,state,action,reward,next_state)
+        if done:
+            self.reset()
+        return next_state, reward, done
+
 
 class DecQAnt(AntAgent):
     def __init__(self,ID,env):
         super().__init__(ID,env,'decQ')
         self.Q = defaultdict(lambda: np.zeros(self.env.num_act))
+    
+    def policy(self,state):
+        idx = self.env.antIndex
+        epsilon = self.env.epsilon
+        # state = (self.env.ant_locations[idx],self.env.has_food[idx])
+        probs = [epsilon/len(self.env.ants[idx].Q[state])]*len(self.env.ants[idx].Q[state])
+        probs[np.argmax(self.env.ants[idx].Q[state])] = 1 - epsilon + epsilon/len(self.env.ants[idx].Q[state])
+        return probs
 
 
 
