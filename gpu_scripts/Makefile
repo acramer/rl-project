@@ -28,7 +28,7 @@ under-gpu:
 
 setup-gpu:
 	echo [MAKE - gpu]
-	git diff-index --quiet HEAD code || (git add code && git commit -m 'gpu commit' && git push)
+	git diff-index --quiet HEAD code || (git add ../ && git commit -m 'gpu commit' && git push)
 	make gpu-soft-kill || echo "CPU already off"
 	gcloud compute instances start alan
 
