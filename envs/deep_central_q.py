@@ -230,6 +230,7 @@ class DeepCentralEnvironment(TensorEnvironment):
             print('E:{:4d} - {:>4d}/{:4d} - Steps:{:4d} - Loss:{:8.3f} - Rewards:{:5d}'.format(ei,int(self.totalFoodCollected),int(self.total_starting_food),i,total_loss,total_rewards))
         self.reset()
 
+
 class CDQAnt(AntAgent):
     def __init__(self,ID,env):
         super().__init__(ID,env,'centralDQ')
