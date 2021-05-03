@@ -143,16 +143,16 @@ class SimpleClassifier(torch.nn.Module):
         from os import path
         return torch.save((self.state_dict(), self.params), path.join(path.dirname(path.abspath(__file__)), 'cls'+des+'.th'))
 
-    def load_model():
+    def load_model(path='cls.th'):
         from os import path
-        std, params = torch.load(path.join(path.dirname(path.abspath(__file__)), 'cls.th'), map_location='cpu')
+        std, params = torch.load(path.join(path.dirname(path.abspath(__file__)), path), map_location='cpu')
         r = SimpleClassifier(*params)
         r.load_state_dict(std)
         return r
 
 class DeepCentralEnvironment(TensorEnvironment):
-    def __init__(self,epochs=1,max_steps=600,epsilon=0.4,load=False,replay_memory_size=100,memory_len=10,**kwargs):
-        super().__init__(CDQAnt,memory_len=10,**kwargs)
+    def __init__(self,args,replay_memory_size=100,memory_len=10,**kwargs):
+        super().__init__(CDQAnt,memory_len=memory_len,**kwargs)
 
         # State Size
         #  8 # food,
@@ -164,13 +164,14 @@ class DeepCentralEnvironment(TensorEnvironment):
         # 48
         self.state_size = 48
 
+        self.args = args
         self.replay_memory_size = replay_memory_size
         self._device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
         self.D = set()
         self.steps = 0
-        if load:
-            self.model = SimpleClassifier.load().to(self._device)
+        if args.load_model_dir:
+            self.model = SimpleClassifier.load(args.load_model_dir).to(self._device)
         else:
             self.model        = SimpleClassifier([self.state_size,self.state_size//2,self.num_act]).to(self._device)
             self.target_model = SimpleClassifier([self.state_size,self.state_size//2,self.num_act]).to(self._device)
@@ -178,18 +179,18 @@ class DeepCentralEnvironment(TensorEnvironment):
 
         # TODO: learning args
         # Loss
-        # loss = torch.nn.CrossEntropyLoss()
-        # Huber Loss
-        self.loss = torch.nn.SmoothL1Loss()
+        # SmoothL1 == Huber Loss
+        if args.huber: self.loss = torch.nn.SmoothL1Loss()
+        else:          self.loss = torch.nn.CrossEntropyLoss()
         # Optimizer
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001, weight_decay=1e-5)
-        # if args.adam: optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=1e-5)
-        # else:         optimizer = torch.optim.SGD( model.parameters(), lr=args.learning_rate, momentum=0.9, weight_decay=1e-3)
+        #self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001, weight_decay=1e-5)
+        if args.adam: self.optimizer = torch.optim.Adam(self.model.parameters(), lr=args.learning_rate, weight_decay=1e-5)
+        else:         self.optimizer = torch.optim.SGD( self.model.parameters(), lr=args.learning_rate, momentum=0.9, weight_decay=1e-3)
         # Step Scheduler
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', patience=4)
-        # if args.step_schedule: scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=4)
-        if not load:
-            self.train(epochs,max_steps,epsilon)
+        #                      self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', patience=4)
+        if args.step_schedule: self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', patience=4)
+        if args.load_model_dir is None:
+            self.train(args.epochs,args.max_steps,args.epsilon)
 
     def get_reward(self, action):
         state = self.get_state()
@@ -206,7 +207,7 @@ class DeepCentralEnvironment(TensorEnvironment):
 
         total_reward = 0
         if obstacle > 0: 
-            return -5
+            return -100
 
         nest_dist2 = lambda x:(x[0]-self.nest[0])**2+(x[1]-self.nest[1])**2
 
@@ -226,15 +227,15 @@ class DeepCentralEnvironment(TensorEnvironment):
             else:
                 total_reward += rewards[5]
             if (nr,nc) == tuple(self.state_mem[antID][-1]):
-                total_reward += -5
-        if (nr,nc) == tuple(self.state_mem[antID][-2]):
-            total_reward += -3
+                total_reward += -10
+            elif (nr,nc) == tuple(self.state_mem[antID][-2]):
+                total_reward += -10
         if (nr,nc) == tuple(self.state_mem[antID][-3]):
-            total_reward += -2
+            total_reward += -5
         if (nr,nc) == tuple(self.state_mem[antID][-4]):
-            total_reward += -1
+            total_reward += -3
         if (nr,nc) == tuple(self.state_mem[antID][-5]):
-            total_reward += -1
+            total_reward += -2
         return total_reward
 
     def get_state(self, antID=None):
@@ -308,10 +309,11 @@ class DeepCentralEnvironment(TensorEnvironment):
                 if done: break
             
             # Step Learning Rate
-            # if args.step_schedule:
-            #     scheduler.step(total_loss)
-            self.scheduler.step(total_loss)
+            if self.args.step_schedule:
+                scheduler.step(total_loss)
+            # self.scheduler.step(total_loss)
             print('E:{:4d} - {:>4d}/{:4d} - Steps:{:4d} - Loss:{:8.3f} - Rewards:{:5d}'.format(ei,int(self.totalFoodCollected),int(self.total_starting_food),i,total_loss,total_rewards))
+        self.reset()
 
 class CDQAnt(AntAgent):
     def __init__(self,ID,env):
