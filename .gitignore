@@ -134,3 +134,4 @@ dmypy.json
 # Model Files
 models/
 videos/
+logs/

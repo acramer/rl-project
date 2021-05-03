@@ -1,13 +1,13 @@
 from Configure import parse_configs, print_configs
 from procedural_ant import ProceduralEnvironment 
-from centralized_q import CentralEnvironment, JointEnvironment, DecentralizedEnvironment, DeepCentralEnvironment
+from centralized_q import CentralEnvironment, JointEnvironment, DecentralizedEnvironment
+from deep_central_q import DeepCentralEnvironment
 
 import numpy as np
 import matplotlib.pyplot as plt
 
 from matplotlib.animation import FFMpegWriter
 metadata = {'title':'ants simulation','artist':'ants','comment':'comments'}
-# writer = FFMpegWriter(fps=15,codec='hevc',metadata=metadata)
 writer = FFMpegWriter(fps=15,metadata=metadata)
 
 Environments = {'procedural': ProceduralEnvironment,

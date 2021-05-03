@@ -61,9 +61,9 @@ default_configs = {
     # NOTE: Training/Evaluation args that don't effect learning algorithm:
 
     # NOTE: Example, maybe implement
-    # 'wandb':             {'default': True,
-    #                       'flags':   ['--no_logging', '-n'],
-    #                       'argparse':{'action':'store_false','help':'Turns logging on Weights&Bias off.'}},
+    'wandb':             {'default': True,
+                          'flags':   ['--no_logging', '-n'],
+                          'argparse':{'action':'store_false','help':'Turns logging on Weights&Bias off.'}},
     'description':       {'default': '',
                           'flags':   ['--des'],
                           'argparse':{'type':str,'help':'Model Description, used in folder and log naming.'}},
@@ -85,7 +85,7 @@ default_configs = {
     'save_model_dir':    {'default': 'models',
                           'flags':   ['--model_dir'],
                           'argparse':{'type':str,'help':'Path of the directory the model is saved to.'}},
-    'log_directory':     {'default': 'logs',
+    'log_dir':           {'default': 'logs',
                           'flags':   ['--log_dir'],
                           'argparse':{'type':str,'help':'Path of the log directory for W&B or TB.'}},
 
