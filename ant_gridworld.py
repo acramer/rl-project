@@ -1,4 +1,6 @@
 from random import random, randint
+import torch
+import torch.nn.functional as F
 import numpy as np
 from time import sleep
 import matplotlib.pyplot as plt
@@ -65,7 +67,7 @@ class AntGridworld:
         if memory_len  is None : memory_len  = self.memory_len
         if ant_agent   is None : ant_agent   = self.ant_agent
 
-        self.state = AntGridworld.State(env_size)
+        self.state = self.State(env_size)
         self.done = False
         self.ants          = []
         self.expl_ants     = []
@@ -83,8 +85,10 @@ class AntGridworld:
         elif nest_loc == 'random':
             self.nest = (np.random.choice(np.arange(env_size)),np.random.choice(np.arange(env_size)))
 
-        self.state_mem = np.concatenate((np.ones((num_ants,memory_len)).reshape(num_ants,memory_len,1)*self.nest[0],
-                                         np.ones((num_ants,memory_len)).reshape(num_ants,memory_len,1)*self.nest[1]),2)
+        self.state_mem = np.concatenate((np.ones((num_ants,memory_len,1))*self.nest[0],
+                                         np.ones((num_ants,memory_len,1))*self.nest[1]),2)
+        # self.state_mem = np.concatenate((np.ones((num_ants,memory_len)).reshape(num_ants,memory_len,1)*self.nest[0],
+        #                                  np.ones((num_ants,memory_len)).reshape(num_ants,memory_len,1)*self.nest[1]),2)
 
         self.init_food_obstacles(food_num, max_wt, nest_range,obstacle_no)
         for idx in range(num_ants):
@@ -358,14 +362,59 @@ class TensorEnvironment(AntGridworld):
         def remaining_food(self):
             return self.food_space.sum()
 
-    # TODO: learn embedding
-    def __init__(self,**kwargs):
-        super().__init__(**kwargs)
+    def __init__(self,ant_agent,**kwargs):
+        super().__init__(ant_agent,**kwargs)
+        self.num_act = 8 
 
-    def reset(self,**kwargs):
-        super().reset(**kwargs)
-        self.state_mem = torch.cat((torch.ones((self.num_ants,self.memory_len,1))*self.nest[0],
-                                    torch.ones((self.num_ants,self.memory_len,1))*self.nest[1]),2)
+        # State Size
+        #  8 # food,
+        #  8 # trail,
+        #  8 # obstacles,
+        #  2 # torch.tensor([self.has_food[antID], self.action_mem[antID]]),
+        # 40 # self.state_mem[antID].flatten(),
+        #  2 # torch.tensor(self.ant_locations[antID]),
+        #  2 # to_nest,
+        # 70
+        self.state_size = 70
+
+    def reset(self, env_size=None, food_num=None, num_ants=None, max_wt=None, nest_loc=None, nest_range=None, obstacle_no=None, memory_len=None, ant_agent=None):
+        if env_size    is None : env_size    = self.env_size   
+        if food_num    is None : food_num    = self.food_num   
+        if num_ants    is None : num_ants    = self.num_ants   
+        if max_wt      is None : max_wt      = self.max_wt     
+        if nest_loc    is None : nest_loc    = self.nest_loc   
+        if nest_range  is None : nest_range  = self.nest_range 
+        if obstacle_no is None : obstacle_no = self.obstacle_no
+        if memory_len  is None : memory_len  = self.memory_len
+        if ant_agent   is None : ant_agent   = self.ant_agent
+
+        self.state = self.State(env_size)
+        self.done = False
+        self.ants          = []
+        self.expl_ants     = []
+        self.has_food      = []
+        self.action_mem    = []
+        self.ant_locations = []
+
+        self.totalFoodCollected = 0
+
+        if nest_loc == 'center':
+            self.nest = ((env_size-1)//2,(env_size-1)//2)
+        elif nest_loc == 'corner':
+            choices = ((0,0),(0,env_size-1),(env_size-1,0),(env_size-1,env_size-1))
+            self.nest = choices[np.random.choice(len(choices))]
+        elif nest_loc == 'random':
+            self.nest = (np.random.choice(np.arange(env_size)),np.random.choice(np.arange(env_size)))
+
+        self.state_mem = torch.cat((torch.ones((num_ants,memory_len,1))*self.nest[0],
+                                    torch.ones((num_ants,memory_len,1))*self.nest[1]),2)
+
+        self.init_food_obstacles(food_num, max_wt, nest_range,obstacle_no)
+        for idx in range(num_ants):
+            self.addAntToColony(idx)
+
+        self.antIndex = 0
+        self.total_starting_food = self.state.remaining_food()
 
         return self.get_state()
 
@@ -383,17 +432,17 @@ class TensorEnvironment(AntGridworld):
         if   c < self.nest[1]: to_nest[1] =  1
         elif c > self.nest[1]: to_nest[1] = -1
 
-        return np.concatenate((  food,
-                                 trail,
-                                 obstacles,
-                                 torch.tensor([self.has_food[antID], self.action_mem[antID]]),
-                                 self.state_mem[antID].flatten(),
-                                 torch.tensor(self.ant_locations[antID]),
-                                 to_nest,
-                               ))
+        return torch.cat((  food,
+                            trail,
+                            obstacles,
+                            torch.tensor([self.has_food[antID], self.action_mem[antID]]),
+                            self.state_mem[antID].flatten(),
+                            torch.tensor(self.ant_locations[antID]),
+                            to_nest,
+                          ))
 
     def full_step_update(self):
-        self.state_mem = torch.cat((self.state_mem[:,1:],np.array(self.ant_locations).unsqueeze(1)),1)
+        self.state_mem = torch.cat((self.state_mem[:,1:],torch.tensor(self.ant_locations).unsqueeze(1)),1)
         self.state.trail_space -= 0.05
         self.state.trail_space[self.state.trail_space<0] = 0
         self.done = self.totalFoodCollected == self.total_starting_food
