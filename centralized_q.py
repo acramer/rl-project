@@ -1,6 +1,7 @@
 from ant_gridworld import NumpyEnvironment, TensorEnvironment, AntAgent, ACTIONS
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.widgets as widgets
@@ -150,8 +151,19 @@ class SimpleClassifier(torch.nn.Module):
         return r
 
 class DeepCentralEnvironment(TensorEnvironment):
-    def __init__(self,epochs=1,max_steps=600,epsilon=0.4,load=False,replay_memory_size=100,**kwargs):
-        super().__init__(CDQAnt,**kwargs)
+    def __init__(self,epochs=1,max_steps=600,epsilon=0.4,load=False,replay_memory_size=100,memory_len=10,**kwargs):
+        super().__init__(CDQAnt,memory_len=10,**kwargs)
+
+        # State Size
+        #  8 # food,
+        #  8 # trail,
+        #  8 # obstacles,
+        #  2 # torch.tensor([self.has_food[antID], self.action_mem[antID]]),
+        # 20 # self.state_mem[antID].flatten(),
+        #  2 # to_nest,
+        # 48
+        self.state_size = 48
+
         self.replay_memory_size = replay_memory_size
         self._device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -162,6 +174,7 @@ class DeepCentralEnvironment(TensorEnvironment):
         else:
             self.model        = SimpleClassifier([self.state_size,self.state_size//2,self.num_act]).to(self._device)
             self.target_model = SimpleClassifier([self.state_size,self.state_size//2,self.num_act]).to(self._device)
+
 
         # TODO: learning args
         # Loss
@@ -193,8 +206,7 @@ class DeepCentralEnvironment(TensorEnvironment):
 
         total_reward = 0
         if obstacle > 0: 
-            return -1 # total_reward += -1
-
+            return -5
 
         nest_dist2 = lambda x:(x[0]-self.nest[0])**2+(x[1]-self.nest[1])**2
 
@@ -213,7 +225,39 @@ class DeepCentralEnvironment(TensorEnvironment):
                 total_reward += rewards[4]
             else:
                 total_reward += rewards[5]
+            if (nr,nc) == tuple(self.state_mem[antID][-1]):
+                total_reward += -5
+        if (nr,nc) == tuple(self.state_mem[antID][-2]):
+            total_reward += -3
+        if (nr,nc) == tuple(self.state_mem[antID][-3]):
+            total_reward += -2
+        if (nr,nc) == tuple(self.state_mem[antID][-4]):
+            total_reward += -1
+        if (nr,nc) == tuple(self.state_mem[antID][-5]):
+            total_reward += -1
         return total_reward
+
+    def get_state(self, antID=None):
+        antID = self.antIndex if antID is None else antID
+        r, c  = self.ant_locations[antID]
+        actView=[1,2,5,8,7,6,3,0]
+        obstacles = F.pad(self.state.grid_space, (1,1,1,1),value=-1)[r:r+3,c:c+3].flatten()[actView]
+        food      = F.pad(self.state.food_space, (1,1,1,1),value=-1)[r:r+3,c:c+3].flatten()[actView]
+        trail     = F.pad(self.state.trail_space,(1,1,1,1),value=-1)[r:r+3,c:c+3].flatten()[actView]
+
+        to_nest = torch.zeros(2)
+        if   r < self.nest[0]: to_nest[0] =  1
+        elif r > self.nest[0]: to_nest[0] = -1
+        if   c < self.nest[1]: to_nest[1] =  1
+        elif c > self.nest[1]: to_nest[1] = -1
+
+        return torch.cat((  food,
+                            trail,
+                            obstacles,
+                            torch.tensor([self.has_food[antID], self.action_mem[antID]]),
+                            self.state_mem[antID].flatten(),
+                            to_nest,
+                          ))
 
     def train(self,epochs=1,max_steps=600,epsilon=0.4,alpha=0.1,gamma=0.1,updates_interval=10):
         def epsilon_pi(state):
@@ -222,6 +266,7 @@ class DeepCentralEnvironment(TensorEnvironment):
             ret = [explore_prob]*self.num_act
             ret[Q.argmax()] = 1 - epsilon + explore_prob
             return ret
+
         for ei in range(epochs):
             state = self.reset()
             total_rewards = 0
@@ -230,8 +275,6 @@ class DeepCentralEnvironment(TensorEnvironment):
                 action = np.random.choice(list(range(self.num_act)),p=epsilon_pi(state))
                 next_state, reward, done = self.step(action)
                 total_rewards += reward
-                # next_state = tuple(next_state)
-                # self.D.add((tuple(state),action,reward, None if done else tuple(new_state)))
                 self.D.add((state,action,reward, None if done else next_state))
 
                 sample = list(self.D)
@@ -240,15 +283,12 @@ class DeepCentralEnvironment(TensorEnvironment):
 
                 x,y = [],[]
                 for pj,aj,rj,pnj in sample:
-                    # x.append(list(pj))
                     x.append(pj)
-                    # pj, pnj = np.array(pj), np.array(pnj)
                     yj = rj if pnj is None else rj + gamma*self.target_model(pnj.unsqueeze(0)).max()
                     yt = self.model(pj.unsqueeze(0)).clone()
                     yt[0,aj] = yj
                     y.append(yt)
 
-                # x = np.array(x).unsqueeze(0)
                 x = torch.cat(x,0).to(self._device)
                 y = torch.cat(y,0).to(self._device)
 
