@@ -16,7 +16,7 @@ def main(configs):
     environment = Environments['decentral-q'](num_ants=configs.num_ants,epochs=configs.epochs,max_steps=configs.max_steps,epsilon=configs.epsilon)
     done = False
     if isinstance(environment,DecentralizedEnvironment):
-        configs.max_steps = 5000
+        configs.max_steps = 100000
     for i in range(configs.max_steps):
         if isinstance(environment,DecentralizedEnvironment):
             environment.train()
@@ -27,13 +27,16 @@ def main(configs):
                 state, reward, done = environment.step(action)
         if done: break
         if configs.simulate: environment.plot_environment(i)
+        # environment.plot_environment(i)
     print('Total Food:',environment.totalFoodCollected)
     print('Left Food:',environment.state.remaining_food())
     print('Last Step:',i)
     if isinstance(environment,DecentralizedEnvironment):
-        plt.plot(environment.rewards)
+        fig, ax = plt.subplots(2)
+        ax[0].plot(environment.rewards)
+        ax[1].plot(environment.left_food)
         plt.show()
-        plt.pause(10)
+        plt.pause(60)
     
 
 

@@ -182,8 +182,17 @@ class AntGridworld:
         if obstacle > 0: 
             return -1 # total_reward += -1
 
-        exploring_rewards  = [  75, -1, -1,  1, 10,  0, 1]
-        exploiting_rewards = [ 100, -1, -2,  0,  5,  1, 1]
+        # rewards: dropping food at nest [0]
+        #          returning and using trail [1]
+        #          returning and not using trail [2]
+        #          reducing distance from nest while returning [3]
+        #          finding new gridpoint while foraging [4]
+        #          finding food [5]
+        #          walking on trail while foraging [6]
+        #          increasing distance from nest while foraging [7]
+
+        exploring_rewards  = [  20, -1, 1, 1, 1, 10,  0, -1]
+        exploiting_rewards = [  20, -1, 1, 1, 1, 10,  0, -1]
 
         # Squared distance to nest
         nest_dist2 = lambda x:(x[0]-self.nest[0])**2+(x[1]-self.nest[1])**2
@@ -198,16 +207,22 @@ class AntGridworld:
                 total_reward += rewards[1]
             else:
                 total_reward += rewards[2]
+            if nest_dist2(last_loc) > nest_dist2((nr,nc)):
+                total_reward += rewards[3]
+            # else:
+                # total_reward += -rewards[3]
         else:
             if not is_explored:  
-                total_reward += rewards[3]
-            if food_val>0:
                 total_reward += rewards[4]
-            elif trail_val>0:
+            if food_val>0:
                 total_reward += rewards[5]
+            elif trail_val>0:
+                total_reward += rewards[6]
             # If returning reinforce getting closer to nest
             if nest_dist2(last_loc) > nest_dist2((nr,nc)):
-                total_reward += rewards[6]
+                total_reward += rewards[7]
+            # else:
+                # total_reward += -rewards[7]
         return total_reward
 
     def step(self, action):
@@ -277,8 +292,8 @@ class AntGridworld:
         plt.clf()
         if stepNum >= 0:
             plt.annotate('Step: '+str(stepNum),(5,-1))
-        plt.annotate('Food Stored: '+str(self.totalFoodCollected),(7,-1))
-        plt.annotate('Food Left: '+str(self.state.remaining_food()),(11,-1))
+        plt.annotate('Food Stored: '+str(self.totalFoodCollected),(9,-1))
+        plt.annotate('Food Left: '+str(self.state.remaining_food()),(14,-1))
         plt.axis([-1,C,R,-1])
         plt.scatter(self.nest[1],self.nest[0], color='#D95319', marker='s', s=70)   # Nest
         plt.scatter(tX,tY, color='#0072BD', s=4)                                    # Trail

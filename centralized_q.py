@@ -90,6 +90,7 @@ class DecentralizedEnvironment(NumpyEnvironment):
         self.num_act = 8 
         self.Q = defaultdict(lambda: np.zeros(self.num_act))
         self.rewards = []
+        self.left_food = []
         # self.train(epochs,max_steps,epsilon)
 
     # TODO: get hyper params epsilon,alpha,gamma
@@ -110,9 +111,10 @@ class DecentralizedEnvironment(NumpyEnvironment):
                 self.Q[state][action] = self.Q[state][action] + alpha*(reward+gamma*max(self.Q[next_state])- self.Q[state][action])
                     # state = next_state
                 if done: break
-                self.state.trail_space = self.state.trail_space-0.01
-                self.state.trail_space[self.state.trail_space<0] = 0
-            self.rewards.append(total_reward)
+            self.state.trail_space = self.state.trail_space-0.05
+            self.state.trail_space[self.state.trail_space<0] = 0
+            self.rewards.append(total_reward/self.num_ants)
+            self.left_food.append(self.state.remaining_food())
 
 class DQAnt(AntAgent):
     def __init__(self,ID,env):
