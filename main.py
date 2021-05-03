@@ -44,7 +44,7 @@ def main(configs):
     done = False
     if isinstance(environment,DecentralizedEnvironment):
         configs.max_steps = 50000
-    if configs.simulate:
+    if configs.save_video:
         fig = plt.figure()
         with writer.saving(fig,'videos/sim'+configs.architecture+configs.description+'.mp4',100):
             for i in range(configs.max_steps):
@@ -64,6 +64,7 @@ def main(configs):
                     choice_dist = ant.policy(environment.get_state())
                     action = np.random.choice(list(range(len(choice_dist))),p=choice_dist)
                     state, reward, done = environment.step(action)
+            if configs.simulate: environment.plot_environment(i)
             if done: break
     print('Total Food:',environment.totalFoodCollected)
     print('Left Food:',environment.state.remaining_food())
