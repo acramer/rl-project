@@ -96,8 +96,6 @@ class JointEnvironment(NumpyEnvironment):
         _, reward, done = super().step(action)
         next_state = (self.ant_locations[idx], self.has_food[idx])
         self.train(state,action,reward,next_state)
-        if done:
-            self.reset()
         return next_state, reward, done
 
 class JQAnt(AntAgent):
@@ -131,8 +129,6 @@ class DecentralizedEnvironment(NumpyEnvironment):
         _, reward, done = super().step(action)
         next_state = (self.ant_locations[idx], self.has_food[idx])
         self.train(idx,state,action,reward,next_state)
-        if done:
-            self.reset()
         return next_state, reward, done
 
 
