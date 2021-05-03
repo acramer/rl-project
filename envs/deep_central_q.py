@@ -164,7 +164,8 @@ class DeepCentralEnvironment(TensorEnvironment):
         if   c < self.nest[1]: to_nest[1] =  1
         elif c > self.nest[1]: to_nest[1] = -1
 
-        return torch.cat((  food+obstacles,
+        return torch.cat((  food-obstacles,
+
                             trail,
                             torch.tensor([self.has_food[antID], self.action_mem[antID]]),
                             self.state_mem[antID].flatten(),
