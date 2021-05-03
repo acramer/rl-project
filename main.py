@@ -52,8 +52,10 @@ def plot_average(configs):
                 action = np.random.choice(list(range(len(choice_dist))),p=choice_dist)
                 state, reward, done = environment.step(action)
                 total_reward += reward
-            reward_per_step[i] += (total_reward                   - reward_per_step[i])/(ei+1)
-            food_per_step[i]   += (environment.totalFoodCollected - food_per_step[i]  )/(ei+1)
+            # reward_per_step[i] += (total_reward                   - reward_per_step[i])/(ei+1)
+            # food_per_step[i]   += (environment.totalFoodCollected - food_per_step[i]  )/(ei+1)
+            reward_per_step[i] += total_reward/environment.num_ants
+            food_per_step[i] += environment.totalFoodCollected
             if done: break
     fig, ax = plt.subplots(2)
     ax[0].plot(reward_per_step)
