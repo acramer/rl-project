@@ -1,7 +1,7 @@
 from Configure import parse_configs, print_configs
-from procedural_ant import ProceduralEnvironment 
-from centralized_q import CentralEnvironment, JointEnvironment, DecentralizedEnvironment
-from deep_central_q import DeepCentralEnvironment
+from envs.procedural_ant import ProceduralEnvironment 
+from envs.centralized_q import CentralEnvironment, JointEnvironment, DecentralizedEnvironment
+from envs.deep_central_q import DeepCentralEnvironment
 
 import numpy as np
 import matplotlib.pyplot as plt

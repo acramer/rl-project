@@ -1,4 +1,4 @@
-from ant_gridworld import TensorEnvironment, AntAgent
+from envs.ant_gridworld import TensorEnvironment, AntAgent
 
 import torch
 import torch.nn as nn
@@ -64,14 +64,13 @@ class DeepCentralEnvironment(TensorEnvironment):
         super().__init__(CDQAnt,memory_len=memory_len,**kwargs)
 
         # State Size
-        #  8 # food,
-        #  8 # trail,
+        #  8 # food, #  8 # trail,
         #  8 # obstacles,
         #  2 # torch.tensor([self.has_food[antID], self.action_mem[antID]]),
         # 20 # self.state_mem[antID].flatten(),
         #  2 # to_nest,
-        # 48
-        self.state_size = 48
+        # 40
+        self.state_size = 40
 
         self.args = args
         self.updates_interval = updates_interval
@@ -82,8 +81,8 @@ class DeepCentralEnvironment(TensorEnvironment):
         if args.load_model_dir:
             self.model = SimpleClassifier.load(args.load_model_dir).to(self._device)
         else:
-            self.model        = SimpleClassifier([self.state_size,self.state_size//2,self.num_act]).to(self._device)
-            self.target_model = SimpleClassifier([self.state_size,self.state_size//2,self.num_act]).to(self._device)
+            self.model        = SimpleClassifier([self.state_size,self.state_size*2,self.state_size,self.state_size//2,self.num_act]).to(self._device)
+            self.target_model = SimpleClassifier([self.state_size,self.state_size*2,self.state_size,self.state_size//2,self.num_act]).to(self._device)
 
         if args.wandb:
             if args.log_dir is not None:
@@ -165,9 +164,8 @@ class DeepCentralEnvironment(TensorEnvironment):
         if   c < self.nest[1]: to_nest[1] =  1
         elif c > self.nest[1]: to_nest[1] = -1
 
-        return torch.cat((  food,
+        return torch.cat((  food+obstacles,
                             trail,
-                            obstacles,
                             torch.tensor([self.has_food[antID], self.action_mem[antID]]),
                             self.state_mem[antID].flatten(),
                             to_nest,
@@ -182,12 +180,13 @@ class DeepCentralEnvironment(TensorEnvironment):
             return ret
 
         for ei in range(self.args.epochs):
-            state = self.reset()
+            state = self.reset().to(self._device)
             total_rewards = 0
             total_loss = 0
             for i in range(self.args.max_steps):
                 action = np.random.choice(list(range(self.num_act)),p=epsilon_pi(state))
                 next_state, reward, done = self.step(action)
+                next_state = next_state.to(self._device)
                 total_rewards += reward
                 self.D.add((state,action,reward, None if done else next_state))
 
@@ -227,7 +226,7 @@ class DeepCentralEnvironment(TensorEnvironment):
             if self.args.step_schedule:
                 scheduler.step(total_loss)
             if self.args.wandb:
-                wandb.log({"epoch":i,"rewards":total_rewards,"food_collected":int(self.totalFoodCollected)}, step=global_step)
+                wandb.log({"epoch":i,"rewards":total_rewards,"food_collected":int(self.totalFoodCollected)}, step=self.steps)
             print('E:{:4d} - {:>4d}/{:4d} - Steps:{:4d} - Loss:{:8.3f} - Rewards:{:5d}'.format(ei,int(self.totalFoodCollected),int(self.total_starting_food),i,total_loss,total_rewards))
         self.reset()
 
@@ -236,6 +235,7 @@ class CDQAnt(AntAgent):
         super().__init__(ID,env,'centralDQ')
 
     def policy(self,X):
+        X.to(self.env._device)
         Q = self.env.model(X.unsqueeze(0))
         num_actions = self.env.num_act
         ret = [0]*num_actions

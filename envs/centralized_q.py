@@ -1,4 +1,4 @@
-from ant_gridworld import NumpyEnvironment, TensorEnvironment, AntAgent, ACTIONS
+from envs.ant_gridworld import NumpyEnvironment, TensorEnvironment, AntAgent, ACTIONS
 
 import torch
 import torch.nn as nn

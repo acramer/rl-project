@@ -1,4 +1,4 @@
-from ant_gridworld import AntGridworld, AntAgent, ACTIONS
+from envs.ant_gridworld import AntGridworld, AntAgent, ACTIONS
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.widgets as widgets
