@@ -1,13 +1,14 @@
 from Configure import parse_configs, print_configs
 from procedural_ant import ProceduralEnvironment 
-from centralized_q import CentralEnvironment, DecentralizedEnvironment, DeepCentralEnvironment
+from centralized_q import CentralEnvironment, JointEnvironment, DecentralizedEnvironment, DeepCentralEnvironment
 
 import numpy as np
 import matplotlib.pyplot as plt
 
 Environments = {'procedural': ProceduralEnvironment,
                 'central-q':  CentralEnvironment,
-                'decentral-q': DecentralizedEnvironment,    # Please add this to configs.architecture 
+                'joint-q': JointEnvironment,
+                'dec-q': DecentralizedEnvironment,
                 'deep-central-q': DeepCentralEnvironment,
                 }
 
@@ -15,7 +16,7 @@ def main(configs):
     environment = Environments[configs.architecture](args=configs,num_ants=configs.num_ants,epochs=configs.epochs,max_steps=configs.max_steps,epsilon=configs.epsilon)
     done = False
     if isinstance(environment,DecentralizedEnvironment):
-        configs.max_steps = 100000
+        configs.max_steps = 50000
     for i in range(configs.max_steps):
         if isinstance(environment,DecentralizedEnvironment):
             environment.train()
@@ -35,7 +36,7 @@ def main(configs):
         ax[0].plot(environment.rewards)
         ax[1].plot(environment.left_food)
         plt.show()
-        plt.pause(60)
+        plt.pause(30)
     
 
 
