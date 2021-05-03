@@ -166,7 +166,7 @@ class DeepCentralEnvironment(TensorEnvironment):
         # TODO: learning args
         # Loss
         # loss = torch.nn.CrossEntropyLoss()
-        # self.loss = torch.nn.HuberLoss()
+        # Huber Loss
         self.loss = torch.nn.SmoothL1Loss()
         # Optimizer
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001, weight_decay=1e-5)
@@ -177,6 +177,43 @@ class DeepCentralEnvironment(TensorEnvironment):
         # if args.step_schedule: scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=4)
         if not load:
             self.train(epochs,max_steps,epsilon)
+
+    def get_reward(self, action):
+        state = self.get_state()
+        antID = self.antIndex
+        ant = self.ants[antID]
+
+        nr,nc = self.calc_next_location(action,avoid_obs=False)
+
+        food_val    =     self.state.food_space[nr,nc]
+        trail_val   =    self.state.trail_space[nr,nc]
+        obstacle    =     self.state.grid_space[nr,nc]
+        is_explored = self.state.explored_space[nr,nc]
+        last_loc    = self.state_mem[antID][-1]
+
+        total_reward = 0
+        if obstacle > 0: 
+            return -1 # total_reward += -1
+
+
+        nest_dist2 = lambda x:(x[0]-self.nest[0])**2+(x[1]-self.nest[1])**2
+
+        rewards = [  500, 0, -1, 100, 0, -1]
+        if self.has_food[antID]:
+            if (nr,nc) == self.nest:
+                total_reward += rewards[0]
+            elif nest_dist2(last_loc) > nest_dist2((nr,nc)):
+                total_reward += rewards[1]
+            else:
+                total_reward += rewards[2]
+        else:
+            if food_val>0:
+                total_reward += rewards[3]
+            if nest_dist2(last_loc) > nest_dist2((nr,nc)):
+                total_reward += rewards[4]
+            else:
+                total_reward += rewards[5]
+        return total_reward
 
     def train(self,epochs=1,max_steps=600,epsilon=0.4,alpha=0.1,gamma=0.1,updates_interval=10):
         def epsilon_pi(state):
