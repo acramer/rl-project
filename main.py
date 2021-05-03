@@ -1,7 +1,6 @@
 from Configure import parse_configs, print_configs
 from procedural_ant import ProceduralEnvironment 
-
-from centralized_q import CentralEnvironment, DecentralizedEnvironment
+from centralized_q import CentralEnvironment, DecentralizedEnvironment, DeepCentralEnvironment
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,11 +8,11 @@ import matplotlib.pyplot as plt
 Environments = {'procedural': ProceduralEnvironment,
                 'central-q':  CentralEnvironment,
                 'decentral-q': DecentralizedEnvironment,    # Please add this to configs.architecture 
+                'deep-central-q': DeepCentralEnvironment,
                 }
 
 def main(configs):
-    num_ants = 10
-    environment = Environments['decentral-q'](num_ants=configs.num_ants,epochs=configs.epochs,max_steps=configs.max_steps,epsilon=configs.epsilon)
+    environment = Environments[configs.architecture](num_ants=configs.num_ants,epochs=configs.epochs,max_steps=configs.max_steps,epsilon=configs.epsilon)
     done = False
     if isinstance(environment,DecentralizedEnvironment):
         configs.max_steps = 100000
