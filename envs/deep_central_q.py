@@ -64,13 +64,14 @@ class DeepCentralEnvironment(TensorEnvironment):
         super().__init__(CDQAnt,memory_len=memory_len,**kwargs)
 
         # State Size
-        #  8 # food, #  8 # trail,
-        #  8 # obstacles,
-        #  2 # torch.tensor([self.has_food[antID], self.action_mem[antID]]),
-        # 20 # self.state_mem[antID].flatten(),
+        #  8 # food, #  8 # obstacles,
+        #  8 # trail,
+        #  8 # action_mem one hot, self.action_mem[antID]
+        #  1 # torch.tensor([self.has_food[antID]]),
         #  2 # to_nest,
-        # 40
-        self.state_size = 40
+        # 27
+        self.state_size = 27
+        self.num_act = 8
 
         self.args = args
         self.updates_interval = updates_interval
@@ -118,14 +119,15 @@ class DeepCentralEnvironment(TensorEnvironment):
 
         total_reward = 0
         if obstacle > 0: 
-            return -100
+            return -200
 
         nest_dist2 = lambda x:(x[0]-self.nest[0])**2+(x[1]-self.nest[1])**2
 
-        rewards = [  500, 0, -1, 100, 0, -1]
+        rewards = [  500, 1, -1, 200, 2, -1]
         if self.has_food[antID]:
             if (nr,nc) == self.nest:
                 total_reward += rewards[0]
+            # Moving towards nest with food
             elif nest_dist2(last_loc) > nest_dist2((nr,nc)):
                 total_reward += rewards[1]
             else:
@@ -133,7 +135,9 @@ class DeepCentralEnvironment(TensorEnvironment):
         else:
             if food_val>0:
                 total_reward += rewards[3]
-            if nest_dist2(last_loc) > nest_dist2((nr,nc)):
+            # # Moving towards nest without food
+            # if nest_dist2(last_loc) > nest_dist2((nr,nc)):
+            if not is_explored:
                 total_reward += rewards[4]
             else:
                 total_reward += rewards[5]
@@ -153,20 +157,28 @@ class DeepCentralEnvironment(TensorEnvironment):
         antID = self.antIndex if antID is None else antID
         r, c  = self.ant_locations[antID]
         actView=[1,2,5,8,7,6,3,0]
-        obstacles = F.pad(self.state.grid_space, (1,1,1,1),value=-1)[r:r+3,c:c+3].flatten()[actView]
-        food      = F.pad(self.state.food_space, (1,1,1,1),value=-1)[r:r+3,c:c+3].flatten()[actView]
-        trail     = F.pad(self.state.trail_space,(1,1,1,1),value=-1)[r:r+3,c:c+3].flatten()[actView]
-        to_nest = torch.zeros(2)
+        food      = F.pad(self.state.food_space, (1,1,1,1),value=0)[r:r+3,c:c+3].flatten()[actView]
+        obstacles = F.pad(self.state.grid_space, (1,1,1,1),value=1)[r:r+3,c:c+3].flatten()[actView]
+        trail     = F.pad(self.state.trail_space,(1,1,1,1),value=0)[r:r+3,c:c+3].flatten()[actView]
 
+        to_nest = torch.zeros(2)
         if   r < self.nest[0]: to_nest[0] =  1
         elif r > self.nest[0]: to_nest[0] = -1
         if   c < self.nest[1]: to_nest[1] =  1
         elif c > self.nest[1]: to_nest[1] = -1
 
+        # action_mem = [0]*self.num_act
+        last_act = self.action_mem[antID]
+        if last_act >= 8:
+            last_act = randint(0,8-1)
+        action_mem = [0]*8
+        action_mem[last_act] = 1
+        action_mem = torch.tensor(action_mem)
+
         return torch.cat((  food-obstacles,
                             trail,
-                            torch.tensor([self.has_food[antID], self.action_mem[antID]]),
-                            self.state_mem[antID].flatten(),
+                            action_mem,
+                            torch.tensor([self.has_food[antID]]),
                             to_nest,
                           ))
 
@@ -178,10 +190,36 @@ class DeepCentralEnvironment(TensorEnvironment):
             ret[Q.argmax()] = 1 - self.args.epsilon + explore_prob
             return ret
 
+        env_size    = self.env_size   
+        food_num    = self.food_num   
+        num_ants    = self.num_ants   
+        max_wt      = self.max_wt     
+        nest_loc    = self.nest_loc   
+        nest_range  = self.nest_range 
+        obstacle_no = self.obstacle_no
+        self.env_size    = 9   
+        self.food_num    = 20   
+        self.num_ants    = 5   
+        self.max_wt      = 2     
+        self.nest_loc    = nest_loc   
+        self.nest_range  = nest_range 
+        self.obstacle_no = 3
+        state = self.reset().to(self._device)
         for ei in range(self.args.epochs):
+            if ei == 3*self.args.epochs//4: 
+                self.env_size    = env_size   
+                self.food_num    = food_num   
+                self.num_ants    = num_ants   
+                self.max_wt      = max_wt     
+                self.nest_loc    = nest_loc   
+                self.nest_range  = nest_range 
+                self.obstacle_no = obstacle_no
+                state = self.reset().to(self._device)
+            elif ei < 3*self.args.epochs//4: 
+                state = self.reset(food_num=randint(10,30),obstacle_no=randint(3,9)).to(self._device)
+            else:
+                state = self.soft_reset().to(self._device)
             state = self.soft_reset().to(self._device)
-            # state = self.reset().to(self._device)
-            # self.reset()
             total_rewards = 0
             total_loss = 0
             for i in range(self.args.max_steps):

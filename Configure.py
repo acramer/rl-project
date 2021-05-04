@@ -28,9 +28,9 @@ default_configs = {
     'adam':              {'default': False,
                           'flags':   ['--adam'],
                           'argparse':{'action':'store_true','help':'Adam optimizer used.'}},
-    'huber':             {'default': False,
-                          'flags':   ['--huber'],
-                          'argparse':{'action':'store_true','help':'Adam optimizer used.'}},
+    'huber':             {'default': True,
+                          'flags':   ['--no_huber'],
+                          'argparse':{'action':'store_false','help':'Use CE loss rather than huber.'}},
     'dropout_rate':      {'default': 0.0,
                           'flags':   ['--dropout_rate', '-D'],
                           'argparse':{'type':float}},
@@ -56,14 +56,10 @@ default_configs = {
                           'flags':   ['--max_steps', '-M'],
                           'argparse':{'type':int}},
 
-    # NOTE: Hyper Parameters that change the least:
 
-    # NOTE: Training/Evaluation args that don't effect learning algorithm:
-
-    # NOTE: Example, maybe implement
-    'wandb':             {'default': True,
-                          'flags':   ['--no_logging', '-n'],
-                          'argparse':{'action':'store_false','help':'Turns logging on Weights&Bias off.'}},
+    'wandb':             {'default': False,
+                          'flags':   ['--wandb'],
+                          'argparse':{'action':'store_true','help':'Turns logging on.'}},
     'description':       {'default': '',
                           'flags':   ['--des'],
                           'argparse':{'type':str,'help':'Model Description, used in folder and log naming.'}},
